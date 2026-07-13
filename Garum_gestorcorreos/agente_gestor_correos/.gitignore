@@ -1,0 +1,8 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+data/*.db
+outputs/respuestas_json/*.json
+!outputs/respuestas_json/.gitkeep

@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Secretos y entorno
+.env
+.env.*
+!.env.example
+
+# macOS
+.DS_Store
+
+# logs y salidas de ejecución
+.logs/
+nohup.out

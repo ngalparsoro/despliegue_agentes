@@ -1,0 +1,9 @@
+.env
+*.log
+__pycache__/
+*.pyc
+logs/*.jsonl
+data/uploads/tmp/*
+!data/uploads/tmp/.gitkeep
+outputs/documentos_recibidos/*
+!outputs/documentos_recibidos/.gitkeep

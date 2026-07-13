@@ -1,0 +1,19 @@
+# dependencias del agente Mercurio
+
+# validación de datos (modelos de entrada y salida)
+pydantic>=2.13,<3
+# API HTTP del agente
+flask>=3.0,<4
+# permitir que el front (en otro dominio) llame a la API
+flask-cors>=4.0,<6
+# servidor WSGI para levantar la API/web en producción
+waitress>=3.0,<4
+# generación de los informes en PDF
+reportlab>=4.2,<5
+
+# --- opcional: solo si se usa el LLM para redactar el informe en modo real ---
+# groq>=1.5,<2
+
+# --- desarrollo y tests ---
+pytest>=9.1,<10
+pypdf>=5.1,<6

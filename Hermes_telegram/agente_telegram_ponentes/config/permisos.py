@@ -1,0 +1,12 @@
+from config.settings import _bool
+
+# Permisos operativos
+ALLOW_SEND_TELEGRAM = _bool("ALLOW_SEND_TELEGRAM", "false")
+ALLOW_NOTIFY_ADMIN = _bool("ALLOW_NOTIFY_ADMIN", "false")
+ALLOW_DB_READ = _bool("ALLOW_DB_READ", "true")
+
+# Reglas de escalado del agente
+ESCALATE_UNKNOWN_SPEAKER = _bool("ESCALATE_UNKNOWN_SPEAKER", "true")
+ESCALATE_MULTIPLE_ACTIVE_EVENTS = _bool("ESCALATE_MULTIPLE_ACTIVE_EVENTS", "true")
+ESCALATE_MISSING_DATA = _bool("ESCALATE_MISSING_DATA", "true")
+ESCALATE_LOW_CONFIDENCE = _bool("ESCALATE_LOW_CONFIDENCE", "true")

@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Viajes de Ponentes · Mitumi BackStage</title>
+  <style>
+    :root {
+      --bg: #05070b; --panel: #0b1018; --card: #111722; --row: #0e1420;
+      --line: #273247; --soft: #243048; --text: #f5f7fb; --muted: #a7b0c1;
+      --cyan: #10e6e4; --pink: #ff2f91; --green: #00ff4f; --amber: #f5a000; --red: #ff3347;
+      color-scheme: dark;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; background:
+        radial-gradient(circle at 10% 5%, rgba(16,230,228,0.07), transparent 22%),
+        linear-gradient(180deg, #05070b 0%, #06080c 100%);
+      color: var(--text); font-family: Inter, "Segoe UI", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input, select, textarea { font: inherit; }
+    .hidden { display: none !important; }
+    .shell { max-width: 1080px; margin: 0 auto; padding: 40px 32px 72px; }
+
+    .top-mark { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+    .screen-label { color: var(--cyan); font-size: 15px; font-weight: 900; text-transform: uppercase; letter-spacing: .04em; }
+    .brand { font-size: 24px; font-weight: 900; }
+    .accent-line { height: 3px; background: var(--pink); margin-bottom: 26px; }
+
+    .panel { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 26px 28px; }
+    .panel + .panel { margin-top: 24px; }
+    .view-title { margin: 0; font-size: 26px; line-height: 1; }
+    .view-sub { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
+
+    .section-title { margin: 26px 0 16px; padding-bottom: 12px; border-bottom: 1px solid var(--soft); font-size: 16px; font-weight: 800; }
+    .section-title:first-of-type { margin-top: 8px; }
+    .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 22px; }
+    .field { display: flex; flex-direction: column; }
+    .field.full { grid-column: 1 / -1; }
+    .field label { display: block; color: var(--muted); font-size: 12px; font-weight: 800; margin-bottom: 8px; text-transform: uppercase; }
+    .field label .opt { color: #6b7488; font-weight: 700; text-transform: none; }
+    .input, select.input, textarea.input {
+      width: 100%; min-height: 44px; border: 1px solid #2c3850; border-radius: 10px;
+      background: #0e1520; color: var(--text); padding: 0 14px; outline: none;
+    }
+    textarea.input { min-height: 84px; padding-top: 12px; resize: vertical; }
+    .input::placeholder, textarea.input::placeholder { color: #758096; }
+    .input:focus, textarea.input:focus, select.input:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(16,230,228,0.12); }
+    .de-plataforma .input { background: #0c141d; }
+
+    /* logistics sections (una por servicio) */
+    .logistics { border-top: 1px solid var(--soft); margin-top: 24px; padding-top: 20px; }
+    .logistics-title-group { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .logistics-title-group h3 { margin: 0; font-size: 16px; font-weight: 800; }
+    .inline-sep { color: #43516c; font-weight: 900; }
+    .need-control { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; font-weight: 900; text-transform: uppercase; }
+    .need-toggle { min-width: 50px; height: 34px; border: 1px solid #2a3750; border-radius: 999px; background: #121b29; color: var(--muted); font-size: 12px; font-weight: 900; cursor: pointer; }
+    .need-toggle.active { border-color: var(--cyan); color: var(--cyan); box-shadow: inset 0 0 0 1px var(--cyan); }
+    .services { display: flex; flex-direction: column; gap: 0; }
+
+    .btn { min-height: 44px; border: 1px solid var(--line); border-radius: 12px; background: #0e1520; color: var(--muted); padding: 0 18px; cursor: pointer; font-weight: 900; }
+    .btn.primary { border-color: transparent; background: var(--cyan); color: #041014; }
+    .btn.primary:disabled { opacity: .45; cursor: not-allowed; }
+    .btn.big { min-height: 50px; padding: 0 30px; font-size: 15px; }
+    .spinner { width: 15px; height: 15px; border-radius: 50%; border: 2px solid rgba(4,16,20,.35); border-top-color: #041014; animation: spin .7s linear infinite; display: none; vertical-align: -2px; margin-right: 8px; }
+    .btn.loading .spinner { display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .actions { display: flex; align-items: center; gap: 16px; margin-top: 26px; flex-wrap: wrap; }
+    .hint { font-size: 13px; color: var(--muted); }
+    .hint.warn { color: var(--amber); }
+    .err { margin-top: 14px; border: 1px solid rgba(255,51,71,.6); border-radius: 12px; background: rgba(255,51,71,.08); color: #ffd8dd; padding: 12px 15px; font-size: 14px; }
+
+    /* resultado */
+    .res-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+    .res-head .route { margin-top: 10px; font-size: 15px; font-weight: 700; }
+    .res-head .route .arrow { color: var(--muted); }
+    .res-head .dates { margin-top: 6px; color: var(--muted); font-size: 13px; }
+    .coste { text-align: right; border: 1px solid var(--cyan); border-radius: 10px; background: #0c1a1e; padding: 10px 16px; }
+    .coste .lbl { font-size: 11px; font-weight: 800; color: var(--cyan); text-transform: uppercase; letter-spacing: .04em; }
+    .coste .val { font-size: 22px; font-weight: 900; }
+    .reco { margin: 18px 0 0; border: 1px solid var(--soft); border-radius: 10px; background: rgba(18,27,41,.55); padding: 12px 14px; font-size: 14px; line-height: 1.5; }
+    .porque { margin: 10px 2px 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+    .porque b { color: var(--text); }
+    .res-sec-title { margin: 24px 0 12px; font-size: 12px; font-weight: 900; letter-spacing: .05em; text-transform: uppercase; display: flex; align-items: center; gap: 8px; }
+    .res-sec-title.hotel { color: #8ab4ff; } .res-sec-title.transporte { color: var(--cyan); }
+    .res-sec-title.taxi { color: var(--amber); } .res-sec-title.coche { color: var(--green); }
+    .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+    .option-card { border: 1px solid #2a3750; border-radius: 10px; background: var(--row); padding: 15px; display: flex; flex-direction: column; gap: 8px; }
+    .option-card .oc-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+    .option-card strong { font-size: 15px; }
+    .option-card .price { font-size: 15px; font-weight: 900; color: var(--text); white-space: nowrap; }
+    .option-card .sub { color: var(--muted); font-size: 12.5px; line-height: 1.4; }
+    .option-card .buy { margin-top: auto; align-self: flex-start; text-decoration: none; color: var(--cyan); font-size: 12px; font-weight: 900; text-transform: uppercase; border: 1px solid var(--cyan); border-radius: 8px; padding: 7px 12px; }
+    .option-card .buy:hover { background: rgba(16,230,228,.08); }
+    .empty-mini { color: var(--muted); font-size: 13px; font-style: italic; }
+    .downloads { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--soft); }
+    .pdf { text-decoration: none; font-weight: 900; font-size: 13px; padding: 11px 15px; border-radius: 10px; border: 1px solid; }
+    .pdf.ponente { color: var(--cyan); border-color: var(--cyan); }
+    .pdf.mitumi { color: var(--amber); border-color: var(--amber); }
+    .pdf:hover { filter: brightness(1.1); }
+    .foot-note { color: var(--muted); font-size: 12px; margin-left: auto; }
+    .toast { position: fixed; bottom: 24px; right: 24px; z-index: 50; background: #0e1520; border: 1px solid var(--cyan); color: var(--text); padding: 13px 18px; border-radius: 12px; font-size: 14px; opacity: 0; transform: translateY(12px); transition: opacity .25s, transform .25s; pointer-events: none; }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    @media (max-width: 620px) { .shell { padding: 24px 16px 48px; } .form-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="top-mark">
+      <div class="screen-label">Viajes de Ponentes</div>
+      <div class="brand">MITUMI BACKSTAGE</div>
+    </div>
+    <div class="accent-line"></div>
+
+    <form class="panel" id="form" onsubmit="return buscar(event)">
+      <h1 class="view-title">Buscar viaje del ponente</h1>
+      <p class="view-sub">Los datos del ponente y del evento vienen de la plataforma; añade el origen, las preferencias y marca qué necesita.</p>
+
+      <!-- Datos que aporta la plataforma (aquí un selector de demo) -->
+      <div class="de-plataforma">
+        <h3 class="section-title">Ficha del ponente · de la plataforma</h3>
+        <div class="form-grid">
+          <div class="field full">
+            <label for="ponente_sel">Ponente</label>
+            <select id="ponente_sel" class="input" onchange="cargarPonente()"></select>
+          </div>
+          <div class="field"><label for="nombre_ponente">Nombre ponente</label><input id="nombre_ponente" class="input" oninput="revisar()"></div>
+          <div class="field"><label for="email_ponente">Email <span class="opt">(opcional)</span></label><input id="email_ponente" class="input" type="email"></div>
+          <div class="field"><label for="nombre_evento">Evento <span class="opt">(opcional)</span></label><input id="nombre_evento" class="input"></div>
+          <div class="field"><label for="ciudad_evento">Ciudad del evento (destino)</label><input id="ciudad_evento" class="input" oninput="revisar()"></div>
+          <div class="field"><label for="fecha_inicio">Fecha de inicio</label><input id="fecha_inicio" class="input" type="date" oninput="revisar()"></div>
+          <div class="field"><label for="fecha_fin">Fecha de fin</label><input id="fecha_fin" class="input" type="date" oninput="revisar()"></div>
+        </div>
+      </div>
+
+      <!-- Datos extra que añade el organizador -->
+      <h3 class="section-title">Datos de la búsqueda</h3>
+      <div class="form-grid">
+        <div class="field"><label for="ciudad_origen">Ciudad de origen <span class="opt" id="origenOpt">(si hay transporte)</span></label><input id="ciudad_origen" class="input" oninput="revisar()" placeholder="Desde dónde viaja"></div>
+        <div class="field"><label for="personas">Nº de personas</label><input id="personas" class="input" type="number" min="1" max="20" value="1"></div>
+        <div class="field full"><label for="preferencias">Preferencias <span class="opt">(opcional)</span></label><textarea id="preferencias" class="input" placeholder="p. ej. «sin escalas», «cerca del recinto»…"></textarea></div>
+      </div>
+
+      <!-- Servicios: una casilla Necesita Sí/No por servicio -->
+      <h3 class="section-title">Qué necesita</h3>
+      <div class="services" id="services"></div>
+
+      <div class="actions">
+        <button type="submit" class="btn primary big" id="btn"><span class="spinner"></span><span id="btnText">Buscar</span></button>
+        <span class="hint" id="hint"></span>
+      </div>
+      <div class="err hidden" id="err"></div>
+    </form>
+
+    <div id="resultado"></div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    function escape(s) { return (s || "").replace(/[&<>"]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[m])); }
+    function fmtHora(iso) { const d = new Date(iso); return isNaN(d) ? (iso||"") : d.toLocaleString("es-ES", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" }); }
+    function fmtDia(iso) { const d = new Date(iso); return isNaN(d) ? (iso||"") : d.toLocaleDateString("es-ES", { day:"2-digit", month:"2-digit", year:"numeric" }); }
+    function fmtDur(min) { const h = Math.floor(min/60), m = min%60; return `${h}h ${String(m).padStart(2,"0")}min`; }
+
+    // servicios disponibles (clave, etiqueta y estado por defecto)
+    const SERVICIOS = [
+      { key:"hotel", label:"Alojamiento", def:true },
+      { key:"viaje", label:"Transporte", def:true },
+      { key:"taxi",  label:"Taxi", def:false },
+      { key:"coche", label:"Coche de alquiler", def:false },
+    ];
+
+    // pinto las secciones de "Necesita Sí/No" por servicio
+    function initServicios() {
+      $("services").innerHTML = SERVICIOS.map((s) => `
+        <div class="logistics" data-need="${s.key}">
+          <div class="logistics-title-group">
+            <h3>${s.label}</h3>
+            <span class="inline-sep">|</span>
+            <div class="need-control">
+              <span>Necesita</span>
+              <button type="button" class="need-toggle ${s.def ? "active" : ""}" data-svc="${s.key}" data-val="si" onclick="toggleNeed('${s.key}', true)">Sí</button>
+              <button type="button" class="need-toggle ${s.def ? "" : "active"}" data-svc="${s.key}" data-val="no" onclick="toggleNeed('${s.key}', false)">No</button>
+            </div>
+          </div>
+        </div>`).join("");
+    }
+    // marco Sí o No en un servicio
+    function toggleNeed(key, si) {
+      document.querySelectorAll(`.need-toggle[data-svc="${key}"]`).forEach((b) => {
+        b.classList.toggle("active", (b.dataset.val === "si") === si);
+      });
+      revisar();
+    }
+    // leo si un servicio está en "Sí"
+    function necesita(key) {
+      const b = document.querySelector(`.need-toggle[data-svc="${key}"][data-val="si"]`);
+      return b ? b.classList.contains("active") : false;
+    }
+
+    // DEMO: simula lo que la plataforma pasaría al formulario (datos del ponente).
+    // En producción, este bloque lo rellena la plataforma con sus datos reales.
+    const PONENTES_DEMO = [
+      { nombre_ponente:"Elena Vidal", email_ponente:"elena.vidal@example.com", nombre_evento:"Congreso Gastronómico Euskadi 2026", ciudad_evento:"San Sebastián", fecha_inicio:"2026-09-15", fecha_fin:"2026-09-17" },
+      { nombre_ponente:"Marc Soler", email_ponente:"marc.soler@example.com", nombre_evento:"Foro de Innovación Industrial", ciudad_evento:"Bilbao", fecha_inicio:"2026-10-02", fecha_fin:"2026-10-03" },
+      { nombre_ponente:"Lucía Herrera", email_ponente:"lucia.herrera@example.com", nombre_evento:"Jornada de Cultura y Territorio", ciudad_evento:"Vitoria-Gasteiz", fecha_inicio:"2026-11-20", fecha_fin:"2026-11-20" },
+      { nombre_ponente:"James Whitmore", email_ponente:"james.whitmore@example.com", nombre_evento:"Congreso Gastronómico Euskadi 2026", ciudad_evento:"San Sebastián", fecha_inicio:"2026-09-15", fecha_fin:"2026-09-16" },
+    ];
+    function initPonentes() {
+      $("ponente_sel").innerHTML = `<option value="">— Rellenar a mano —</option>` +
+        PONENTES_DEMO.map((p, i) => `<option value="${i}">${escape(p.nombre_ponente)} · ${escape(p.ciudad_evento)}</option>`).join("");
+    }
+    function cargarPonente() {
+      const v = $("ponente_sel").value;
+      const p = v === "" ? null : PONENTES_DEMO[+v];
+      ["nombre_ponente","email_ponente","nombre_evento","ciudad_evento","fecha_inicio","fecha_fin"].forEach((id) => { $(id).value = p ? (p[id] || "") : ""; });
+      revisar();
+    }
+
+    // reviso si el botón de buscar se puede habilitar
+    function revisar() {
+      const viaje = necesita("viaje");
+      const algo = SERVICIOS.some((s) => necesita(s.key));
+      $("origenOpt").textContent = viaje ? "(obligatoria)" : "(si hay transporte)";
+      const baseOk = $("nombre_ponente").value.trim() && $("ciudad_evento").value.trim() && $("fecha_inicio").value && $("fecha_fin").value;
+      const origenOk = !viaje || $("ciudad_origen").value.trim();
+      let motivo = "";
+      if (!algo) motivo = "Marca al menos un servicio (Necesita: Sí).";
+      else if (!baseOk) motivo = "Faltan datos del ponente o del evento.";
+      else if (!origenOk) motivo = "Para el transporte, indica la ciudad de origen.";
+      $("btn").disabled = !!motivo;
+      $("hint").textContent = motivo;
+      $("hint").className = motivo ? "hint warn" : "hint";
+    }
+
+    function toast(msg) { const el = $("toast"); el.textContent = msg; el.classList.add("show"); setTimeout(() => el.classList.remove("show"), 3500); }
+
+    // tarjetas de resultado (estilo option-card)
+    function cardHotel(h) {
+      const hab = h.habitaciones > 1 ? ` · ${h.habitaciones} habitaciones` : "";
+      return `<div class="option-card"><div class="oc-top"><strong>${escape(h.nombre)}</strong><span class="price">${Math.round(h.precio_total)} ${escape(h.moneda)}</span></div>
+        <div class="sub">${"★".repeat(h.estrellas)} · ${h.valoracion.toFixed(1)}/10 · a ${h.distancia_recinto_km} km · ${h.noches} noche(s)${hab}</div>
+        <a class="buy" href="${escape(h.enlace_reserva)}" target="_blank" rel="noopener">Reservar</a></div>`;
+    }
+    function cardTransporte(o) {
+      const esc = o.ida.escalas === 0 ? "Directo" : `${o.ida.escalas} escala(s)`;
+      return `<div class="option-card"><div class="oc-top"><strong>${escape(o.proveedor)}</strong><span class="price">${Math.round(o.precio_total)} ${escape(o.moneda)}</span></div>
+        <div class="sub">Ida ${fmtHora(o.ida.salida)} → ${fmtHora(o.ida.llegada)}<br>Vuelta ${fmtHora(o.vuelta.salida)} → ${fmtHora(o.vuelta.llegada)}<br>${fmtDur(o.ida.duracion_min)} · ${esc}</div>
+        <a class="buy" href="${escape(o.enlace_reserva)}" target="_blank" rel="noopener">Comprar</a></div>`;
+    }
+    function cardTaxi(t) {
+      return `<div class="option-card"><div class="oc-top"><strong>${escape(t.proveedor)}</strong><span class="price">${Math.round(t.precio_estimado)} ${escape(t.moneda)}</span></div>
+        <div class="sub">${escape(t.descripcion)}</div>
+        <a class="buy" href="${escape(t.enlace_reserva)}" target="_blank" rel="noopener">Contratar</a></div>`;
+    }
+    function cardCoche(c) {
+      return `<div class="option-card"><div class="oc-top"><strong>${escape(c.compania)} · ${escape(c.categoria)}</strong><span class="price">${Math.round(c.precio_total)} ${escape(c.moneda)}</span></div>
+        <div class="sub">${escape(c.oficina)} · ${Math.round(c.precio_dia)} ${escape(c.moneda)}/día · ${c.dias} día(s)</div>
+        <a class="buy" href="${escape(c.enlace_reserva)}" target="_blank" rel="noopener">Reservar</a></div>`;
+    }
+    function seccionRes(clase, icono, titulo, cards, vacio) {
+      return `<div class="res-sec-title ${clase}">${icono} ${titulo}</div>` +
+        (cards.length ? `<div class="cards">${cards.join("")}</div>` : `<div class="empty-mini">${vacio}</div>`);
+    }
+
+    // pinto el resultado de la búsqueda
+    function pintar(data) {
+      const p = data.propuesta, pon = p.ponente || {}, evt = p.evento || {};
+      const origen = pon.ciudad_origen || "origen sin definir";
+      const coste = (p.coste_estimado != null) ? `<div class="coste"><div class="lbl">Coste estimado</div><div class="val">${Math.round(p.coste_estimado)} €</div></div>` : "";
+      let sec = "";
+      if (p.necesita_hotel) sec += seccionRes("hotel", "🏨", "Alojamiento", (p.hoteles||[]).map(cardHotel), "Sin hoteles encontrados.");
+      if (p.necesita_viaje) {
+        sec += seccionRes("transporte", "✈️", "Vuelos", (p.vuelos||[]).map(cardTransporte), "Sin vuelos encontrados.");
+        sec += seccionRes("transporte", "🚆", "Trenes", (p.trenes||[]).map(cardTransporte), "Sin ruta de tren razonable para este trayecto.");
+      }
+      if (p.necesita_taxi) sec += seccionRes("taxi", "🚕", "Taxi / traslados", (p.taxis||[]).map(cardTaxi), "Sin servicios de taxi.");
+      if (p.necesita_coche) sec += seccionRes("coche", "🚗", "Coche de alquiler", (p.coches||[]).map(cardCoche), "Sin coches de alquiler.");
+      const dl = `<div class="downloads">
+        ${data.pdf_ponente ? `<a class="pdf ponente" href="${data.pdf_ponente}" target="_blank" rel="noopener">📄 PDF del ponente (sin precios)</a>` : ""}
+        ${data.pdf_mitumi ? `<a class="pdf mitumi" href="${data.pdf_mitumi}" target="_blank" rel="noopener">📄 PDF para Mitumi (con precios)</a>` : ""}
+        ${pon.email ? `<span class="foot-note">Enviar al ponente: ${escape(pon.email)}</span>` : ""}</div>`;
+      $("resultado").innerHTML = `<div class="panel">
+        <div class="res-head">
+          <div>
+            <h2 class="view-title">${escape(pon.nombre)}</h2>
+            <div class="view-sub">${escape(evt.nombre || "")}</div>
+            <div class="route">${escape(origen)} <span class="arrow">→</span> ${escape(evt.ciudad)}</div>
+            <div class="dates">Llegada ${fmtDia(p.fecha_llegada)} · Salida ${fmtDia(p.fecha_salida)} · ${p.noches} noche(s) · ${p.personas} persona(s)</div>
+          </div>${coste}
+        </div>
+        ${p.recomendacion ? `<p class="reco">💡 ${escape(p.recomendacion)}</p>` : ""}
+        ${p.justificacion ? `<p class="porque"><b>¿Por qué?</b> ${escape(p.justificacion)}</p>` : ""}
+        ${sec}${dl}
+      </div>`;
+      $("resultado").scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    // envío el formulario a la API
+    async function buscar(ev) {
+      ev.preventDefault();
+      $("err").classList.add("hidden");
+      const solicitud = {
+        nombre_ponente: $("nombre_ponente").value.trim(),
+        email_ponente: $("email_ponente").value.trim() || null,
+        nombre_evento: $("nombre_evento").value.trim() || null,
+        ciudad_evento: $("ciudad_evento").value.trim(),
+        fecha_inicio: $("fecha_inicio").value,
+        fecha_fin: $("fecha_fin").value,
+        ciudad_origen: $("ciudad_origen").value.trim() || null,
+        personas: parseInt($("personas").value || "1", 10),
+        preferencias: $("preferencias").value.trim() || null,
+        necesita_hotel: necesita("hotel"),
+        necesita_viaje: necesita("viaje"),
+        necesita_taxi: necesita("taxi"),
+        necesita_coche: necesita("coche"),
+      };
+      const btn = $("btn");
+      btn.disabled = true; btn.classList.add("loading"); $("btnText").textContent = "Buscando…";
+      try {
+        const r = await fetch("/buscar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(solicitud) });
+        if (!r.ok) {
+          const e = await r.json().catch(() => ({}));
+          const msg = (e.detail && e.detail[0] && e.detail[0].msg) || e.detail || "No se pudo completar la búsqueda.";
+          $("err").textContent = typeof msg === "string" ? msg : JSON.stringify(msg);
+          $("err").classList.remove("hidden");
+          return false;
+        }
+        pintar(await r.json());
+        toast("Búsqueda completada");
+      } catch (e) {
+        $("err").textContent = "No se pudo conectar con el servidor.";
+        $("err").classList.remove("hidden");
+      } finally {
+        btn.classList.remove("loading"); $("btnText").textContent = "Buscar"; revisar();
+      }
+      return false;
+    }
+
+    // arranque
+    initServicios();
+    initPonentes();
+    revisar();
+  </script>
+</body>
+</html>

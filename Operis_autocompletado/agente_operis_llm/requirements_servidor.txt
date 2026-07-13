@@ -1,0 +1,5 @@
+# Dependencias SOLO para servidor.py (la API HTTP para el frontend).
+# El agente en si (main.py / ejecutar_agente) sigue sin necesitarlas:
+# ver requirements.txt, que no se toca.
+flask>=3.0.0
+flask-cors>=4.0.0

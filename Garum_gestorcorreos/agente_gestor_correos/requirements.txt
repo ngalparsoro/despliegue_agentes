@@ -1,0 +1,4 @@
+openai==2.44.0
+python-dotenv==1.2.2
+composio==0.17.1
+composio-openai==0.17.1

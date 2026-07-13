@@ -1,0 +1,35 @@
+# knowledge/cities_2.py
+
+# Lista de ciudades principales (puedes ampliarla)
+CITIES = [
+    "Madrid",
+    "Barcelona",
+    "Valencia",
+    "Sevilla",
+    "Zaragoza",
+    "Málaga",
+    "Murcia",
+    "Palma de Mallorca",
+    "Las Palmas de Gran Canaria",
+    "Bilbao",
+    "Alicante",
+    "Córdoba",
+    "Valladolid",
+    "Vigo",
+    "Gijón",
+    "L'Hospitalet de Llobregat",
+    "A Coruña",
+    "Granada",
+    "Vitoria-Gasteiz",
+    "Santa Cruz de Tenerife",
+    "Badalona",
+    "Oviedo",
+    "Cartagena",
+    "Terrassa",
+    "Jerez de la Frontera",
+    "Sabadell",
+    "Móstoles",
+    "Alcalá de Henares",
+    "Fuenlabrada",
+    "Leganés"
+]

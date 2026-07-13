@@ -1,0 +1,13 @@
+# agente_operis (motor único: llm/Groq -- el motor de reglas se eliminó).
+
+groq              # motor de extracción (Groq). Requiere además GROQ_API_KEY (.env). Obligatoria.
+streamlit         # interfaz de prueba (streamlit_app.py). Obligatoria.
+pypdf>=4.0        # lectura de .pdf (streamlit_app.py y main.py). Obligatoria.
+python-docx>=1.1  # lectura de .docx (streamlit_app.py y main.py). Obligatoria.
+
+# Opcional -- el agente funciona sin ellas, con menos capacidades (import perezoso,
+# no rompe nada más si faltan):
+psycopg[binary]   # conexión de solo lectura a la BD real (integrations/bd_backend.py,
+                  # src/lectura_bd.py). Sin ella, no se autocarga histórico ni se
+                  # verifica id_evento contra la BD -- requiere además DATABASE_URL en .env.
+# tiktoken        # solo para regenerar docs/estimacion_tokens.py
