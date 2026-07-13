@@ -560,87 +560,100 @@ def main():
             if SHOW_STEPS and not QUIET_MODE_ENABLED:
                 print("[TELEGRAM] Buscando mensajes nuevos")
 
-            updates = leer_updates(offset=ultimo_update_id)
+            # Blindaje del servicio: un fallo puntual (red de Telegram, BD caída,
+            # error del LLM) no puede tumbar el bot entero. Si falla la lectura
+            # de updates se espera y se reintenta en el siguiente ciclo; si falla
+            # el procesamiento de UN update, se registra y se sigue con el resto
+            # (el update_id ya avanzó, así que no se reprocesa en bucle).
+            try:
+                updates = leer_updates(offset=ultimo_update_id)
+            except Exception as error_lectura:
+                print(f"[SERVICIO] Error leyendo updates de Telegram (se reintenta): {error_lectura}")
+                time.sleep(SERVICE_LOOP_SECONDS)
+                continue
 
             for update in updates:
                 ultimo_update_id = update.get("update_id", 0) + 1
-                payload = update_a_payload(update)
-                if not payload:
-                    continue
+                try:
+                    payload = update_a_payload(update)
+                    if not payload:
+                        continue
 
-                datos_payload = payload.get("datos", {}) or {}
-                chat_id = datos_payload.get("telegram_chat_id")
-                texto_entrada = datos_payload.get("texto", "")
-                callback_data = datos_payload.get("callback_data", "")
-                admin_chat_id = obtener_admin_chat_id()
+                    datos_payload = payload.get("datos", {}) or {}
+                    chat_id = datos_payload.get("telegram_chat_id")
+                    texto_entrada = datos_payload.get("texto", "")
+                    callback_data = datos_payload.get("callback_data", "")
+                    admin_chat_id = obtener_admin_chat_id()
 
-                # Evita que mensajes escritos por el admin al bot sean tratados como consultas de ponente.
-                if admin_chat_id and _normalizar_id(chat_id) == _normalizar_id(admin_chat_id):
+                    # Evita que mensajes escritos por el admin al bot sean tratados como consultas de ponente.
+                    if admin_chat_id and _normalizar_id(chat_id) == _normalizar_id(admin_chat_id):
+                        if es_comando_bienvenida(texto_entrada):
+                            enviar_mensaje(chat_id, "Bot MITUMI activo. Este chat está configurado como ADMIN.")
+                        elif SHOW_STEPS:
+                            print("[TELEGRAM] Mensaje recibido desde admin. Se ignora como consulta de ponente.")
+                        continue
+
+                    if callback_data.startswith("EVT|"):
+                        procesar_callback_evento(payload)
+                        continue
+
+                    if callback_data.startswith("DOC|"):
+                        procesar_callback_documento(payload)
+                        continue
+
+                    if callback_data.startswith("CNT|"):
+                        procesar_callback_contacto(payload)
+                        continue
+
+                    if datos_payload.get("documento"):
+                        procesar_documento_recibido(payload)
+                        continue
+
                     if es_comando_bienvenida(texto_entrada):
-                        enviar_mensaje(chat_id, "Bot MITUMI activo. Este chat está configurado como ADMIN.")
+                        enviar_bienvenida_y_eventos(payload)
+                        if SHOW_STEPS:
+                            print("[PONENTE] Bienvenida y selección de evento enviadas")
+                        continue
+
+                    if es_boton_seleccionar_evento(texto_entrada):
+                        seleccionar_evento(payload)
+                        continue
+
+                    if es_boton_urgencia(texto_entrada):
+                        texto_ponente = (
+                            "🚨 He recibido tu aviso urgente.\n\n"
+                            "Si puedes, escribe brevemente qué ocurre para que MITUMI tenga más contexto."
+                        )
+                        if chat_id and ALLOW_SEND_TELEGRAM:
+                            enviar_mensaje_con_botones(chat_id, texto_ponente)
+                        resultado = construir_resultado_escalado_directo("boton_urgencia_pulsado", "alta")
+                        enviar_aviso_admin_si_aplica(payload, resultado)
+                        continue
+
+                    payload = normalizar_payload_boton(payload)
+                    resultado = ejecutar_agente(payload)
+                    texto = extraer_texto_respuesta(resultado)
+
+                    if not texto and es_urgencia_para_admin(resultado):
+                        texto = (
+                            "He avisado al equipo de MITUMI porque la consulta se ha "
+                            "clasificado como urgente."
+                        )
+                    elif not texto and hay_escalado(resultado):
+                        texto = (
+                            "No puedo confirmar ese dato automáticamente. "
+                            "Puedes solicitar contacto con MITUMI desde la opción disponible."
+                        )
+
+                    if texto and chat_id and ALLOW_SEND_TELEGRAM:
+                        enviar_respuesta_ponente(chat_id, texto, resultado)
                     elif SHOW_STEPS:
-                        print("[TELEGRAM] Mensaje recibido desde admin. Se ignora como consulta de ponente.")
-                    continue
+                        print("[SERVICIO] Respuesta no enviada automáticamente")
+                        print(resultado.get("resumen"))
 
-                if callback_data.startswith("EVT|"):
-                    procesar_callback_evento(payload)
-                    continue
-
-                if callback_data.startswith("DOC|"):
-                    procesar_callback_documento(payload)
-                    continue
-
-                if callback_data.startswith("CNT|"):
-                    procesar_callback_contacto(payload)
-                    continue
-
-                if datos_payload.get("documento"):
-                    procesar_documento_recibido(payload)
-                    continue
-
-                if es_comando_bienvenida(texto_entrada):
-                    enviar_bienvenida_y_eventos(payload)
-                    if SHOW_STEPS:
-                        print("[PONENTE] Bienvenida y selección de evento enviadas")
-                    continue
-
-                if es_boton_seleccionar_evento(texto_entrada):
-                    seleccionar_evento(payload)
-                    continue
-
-                if es_boton_urgencia(texto_entrada):
-                    texto_ponente = (
-                        "🚨 He recibido tu aviso urgente.\n\n"
-                        "Si puedes, escribe brevemente qué ocurre para que MITUMI tenga más contexto."
-                    )
-                    if chat_id and ALLOW_SEND_TELEGRAM:
-                        enviar_mensaje_con_botones(chat_id, texto_ponente)
-                    resultado = construir_resultado_escalado_directo("boton_urgencia_pulsado", "alta")
                     enviar_aviso_admin_si_aplica(payload, resultado)
-                    continue
-
-                payload = normalizar_payload_boton(payload)
-                resultado = ejecutar_agente(payload)
-                texto = extraer_texto_respuesta(resultado)
-
-                if not texto and es_urgencia_para_admin(resultado):
-                    texto = (
-                        "He avisado al equipo de MITUMI porque la consulta se ha "
-                        "clasificado como urgente."
-                    )
-                elif not texto and hay_escalado(resultado):
-                    texto = (
-                        "No puedo confirmar ese dato automáticamente. "
-                        "Puedes solicitar contacto con MITUMI desde la opción disponible."
-                    )
-
-                if texto and chat_id and ALLOW_SEND_TELEGRAM:
-                    enviar_respuesta_ponente(chat_id, texto, resultado)
-                elif SHOW_STEPS:
-                    print("[SERVICIO] Respuesta no enviada automáticamente")
-                    print(resultado.get("resumen"))
-
-                enviar_aviso_admin_si_aplica(payload, resultado)
+                except Exception as error_update:
+                    print(f"[SERVICIO] Error procesando update {update.get('update_id')}: {error_update}")
 
         time.sleep(SERVICE_LOOP_SECONDS)
 

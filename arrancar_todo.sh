@@ -64,8 +64,10 @@ lanzar() {
 # (Garum, el gestor de correos, NO se arranca aquí: no es residente.
 #  Se dispara por ciclos con POST :5003/agentes/garum/ciclos o con
 #  "python3 main.py" en Garum_gestorcorreos/agente_gestor_correos/)
-lanzar backend_5004  backend                                   "$PYTHON app.py"
-lanzar lumen_5001    Lumen_buscador/lumen_agente_04             "$PYTHON servidor.py"
+# PORT se pasa por servicio (backend y Lumen leen la misma variable:
+# si viniera global del .env, uno de los dos arrancaría en el puerto del otro)
+lanzar backend_5004  backend                                   "PORT=5004 $PYTHON app.py"
+lanzar lumen_5001    Lumen_buscador/lumen_agente_04             "PORT=5001 $PYTHON servidor.py"
 lanzar operis_5002   Operis_autocompletado/agente_operis_llm   "$PYTHON servidor.py"
 lanzar jano_8001     Jano_transporte                           "$PYTHON serve_demo_mercurio.py"
 lanzar vigil_8000    Vigil_busquedaconcursos                   "$PYTHON serve_demo.py"

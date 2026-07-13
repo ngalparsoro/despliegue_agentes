@@ -19,6 +19,8 @@ Arrancar:  pip install -r requirements.txt && python app.py   (o vía
 
 # traigo os para leer el puerto del entorno
 import os
+# traigo asyncio para consultar la salud de todas las piezas en paralelo
+import asyncio
 # traigo lo necesario para lanzar y vigilar los ciclos de Garum
 import json
 import subprocess
@@ -49,14 +51,14 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 # borra su entrada de STUBS_PENDIENTES. Nada más.
 # ---------------------------------------------------------------------
 AGENTES = {
-    "lumen": {"base": "http://127.0.0.1:5001", "health": "/"},
-    "operis": {"base": "http://127.0.0.1:5002", "health": "/"},
+    "lumen": {"base": "http://127.0.0.1:5001", "health": "/health"},
+    "operis": {"base": "http://127.0.0.1:5002", "health": "/health"},
     "jano": {"base": "http://127.0.0.1:8001", "health": "/health"},
     "vigil": {"base": "http://127.0.0.1:8000", "health": "/health"},
 }
 
 # Backend de datos para agentes (no es un agente, pero es parte del mapa)
-BACKEND_AGENTES = {"base": "http://127.0.0.1:5004", "health": "/"}
+BACKEND_AGENTES = {"base": "http://127.0.0.1:5004", "health": "/health"}
 
 # Agentes PENDIENTES de recibir en versión definitiva: responden 501 con
 # un mensaje claro. Vacío desde el 13/07: confirmado que Vigil ES el agente
@@ -72,6 +74,16 @@ _CICLOS_GARUM: dict[str, dict] = {}
 
 # tiempo máximo de espera al reenviar (Operis con LLM puede tardar)
 TIMEOUT_PROXY = 60.0
+
+# un único cliente HTTP reutilizado para todo el proceso: abrir uno por
+# petición desperdicia conexiones (el cliente mantiene un pool por destino)
+_CLIENTE = httpx.AsyncClient()
+
+
+@app.on_event("shutdown")
+async def _cerrar_cliente():
+    # cierro el pool de conexiones al apagar el gateway
+    await _CLIENTE.aclose()
 
 
 def _error(codigo: str, mensaje: str, http: int = 400) -> JSONResponse:
@@ -111,6 +123,9 @@ def lanzar_ciclo_garum():
     for id_previo, ciclo in _CICLOS_GARUM.items():
         if ciclo["estado"] == "en_marcha":
             return _error("CICLO_EN_MARCHA", f"Ya hay un ciclo en marcha ({id_previo}). Espera a que termine.", http=409)
+    # no dejo crecer el registro sin límite: me quedo con los 100 últimos
+    while len(_CICLOS_GARUM) > 100:
+        _CICLOS_GARUM.pop(next(iter(_CICLOS_GARUM)))
     id_ciclo = uuid.uuid4().hex[:12]
     proceso = subprocess.Popen(
         [sys.executable, "main.py"],
@@ -161,19 +176,24 @@ async def alias_alertas(ruta: str, request: Request):
 # ---------------------------------------------------------------------
 # Salud agregada: el smoke test y el front pueden ver todo de un vistazo
 # ---------------------------------------------------------------------
+async def _consultar_health(datos: dict) -> str:
+    # pregunto el health de una pieza con un timeout corto
+    try:
+        r = await _CLIENTE.get(datos["base"] + datos["health"], timeout=3.0)
+        return "ok" if r.status_code == 200 else f"http {r.status_code}"
+    except httpx.HTTPError:
+        return "no responde"
+
+
 @app.get("/salud")
 async def salud():
-    estado = {}
-    async with httpx.AsyncClient(timeout=3.0) as cliente:
-        # pregunto a cada agente real y al backend de agentes
-        piezas = dict(AGENTES)
-        piezas["backend_agentes"] = BACKEND_AGENTES
-        for nombre, datos in piezas.items():
-            try:
-                r = await cliente.get(datos["base"] + datos["health"])
-                estado[nombre] = "ok" if r.status_code == 200 else f"http {r.status_code}"
-            except httpx.HTTPError:
-                estado[nombre] = "no responde"
+    # pregunto a cada agente real y al backend de agentes EN PARALELO:
+    # en serie, con varios servicios caídos, la respuesta tardaba
+    # timeout × piezas; en paralelo tarda un solo timeout
+    piezas = dict(AGENTES)
+    piezas["backend_agentes"] = BACKEND_AGENTES
+    resultados = await asyncio.gather(*(_consultar_health(d) for d in piezas.values()))
+    estado = dict(zip(piezas, resultados))
     # Garum no es residente: informo de si hay ciclo en marcha o no
     en_marcha = any(c["estado"] == "en_marcha" for c in _CICLOS_GARUM.values())
     estado["garum"] = "ciclo en marcha" if en_marcha else "bajo demanda"
@@ -207,16 +227,19 @@ async def proxy_agente(agente: str, ruta: str, request: Request):
     if agente not in AGENTES:
         return _error("RUTA_NO_ENCONTRADA", f"No conozco el agente '{agente}'. Reales: {sorted(AGENTES)}; bajo demanda: garum.", http=404)
 
+    # compongo la URL destino conservando la query tal cual llegó (con
+    # dict() se perdían los parámetros repetidos, ej. ?etiqueta=a&etiqueta=b)
     destino = AGENTES[agente]["base"] + "/" + ruta
+    if request.url.query:
+        destino += "?" + request.url.query
     try:
-        async with httpx.AsyncClient(timeout=TIMEOUT_PROXY) as cliente:
-            respuesta = await cliente.request(
-                request.method,
-                destino,
-                params=dict(request.query_params),
-                content=await request.body(),
-                headers={"Content-Type": request.headers.get("Content-Type", "application/json")},
-            )
+        respuesta = await _CLIENTE.request(
+            request.method,
+            destino,
+            content=await request.body(),
+            headers={"Content-Type": request.headers.get("Content-Type", "application/json")},
+            timeout=TIMEOUT_PROXY,
+        )
     except httpx.HTTPError:
         return _error("AGENTE_CAIDO", f"El agente '{agente}' no responde en {AGENTES[agente]['base']}. ¿Está arrancado?", http=502)
 

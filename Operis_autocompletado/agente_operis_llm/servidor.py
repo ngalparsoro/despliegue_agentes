@@ -44,6 +44,7 @@ import sys
 from pathlib import Path
 
 from flask import Flask, request, jsonify
+from werkzeug.exceptions import HTTPException
 
 BASE_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(BASE_DIR))  # permite "from src.agente import ..." y "from config import ..."
@@ -74,6 +75,27 @@ def inicio():
         "motor_por_defecto": settings.MOTOR_POR_DEFECTO,
         "prueba": 'POST /autocompletar con {"texto_briefing": "..."}',
     })
+
+
+# sonda uniforme del sistema (misma forma que Jano y Vigil): la usan el
+# gateway y comprobar_salud.sh
+@app.get("/health")
+def health():
+    from datetime import datetime
+    return jsonify({"estado": "ok", "hora": datetime.now().isoformat()})
+
+
+# los errores HTTP (404, 405...) salen en JSON conservando su codigo
+@app.errorhandler(HTTPException)
+def _error_http(exc):
+    return _error(f"HTTP_{exc.code}", exc.description, http=exc.code)
+
+
+# si el agente revienta, el front recibe el contrato de error en JSON,
+# nunca la pagina HTML de error de Flask
+@app.errorhandler(Exception)
+def _error_interno(exc):
+    return _error("ERROR_INTERNO", str(exc), http=500)
 
 
 @app.post("/autocompletar")
@@ -133,4 +155,6 @@ def autocompletar():
 if __name__ == "__main__":
     print("agente_operis — servidor HTTP para el frontend")
     print("Escuchando en http://localhost:5002  (Ctrl+C para parar)")
-    app.run(host="0.0.0.0", port=5002, debug=False)
+    # 127.0.0.1 como el resto de agentes: la puerta de entrada es el gateway
+    # (:5003); no exponemos el agente a toda la red local sin autenticacion
+    app.run(host="127.0.0.1", port=5002, debug=False)

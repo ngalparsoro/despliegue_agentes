@@ -1,13 +1,25 @@
 import os
+import time
 import logging
 import psycopg
 from dotenv import load_dotenv
+
+# Pool de conexiones (paquete psycopg-pool). Si no está instalado, se degrada
+# a abrir una conexión por petición, como antes.
+try:
+    from psycopg_pool import ConnectionPool
+except ImportError:
+    ConnectionPool = None
 
 # Cargar variables de entorno
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 logger = logging.getLogger("backend_agentes.database")
+
+
+class ErrorBaseDatos(Exception):
+    """La BBDD no está disponible o la configuración falta. app.py la convierte en 503."""
 
 # Mapeo estático para simulación de telegram_user_id si la columna no existe en la BBDD.
 # Relaciona telegram_user_id con el email o id de los ponentes reales de Neon.
@@ -24,27 +36,45 @@ MAPEO_TELEGRAM_DEMO = {
     }
 }
 
+_pool = None
+
 def get_connection():
+    """Devuelve un context manager de conexión: del pool si hay psycopg-pool, directa si no."""
+    global _pool
     if not DATABASE_URL:
-        raise ValueError("La variable de entorno DATABASE_URL no está configurada")
+        raise ErrorBaseDatos("La variable de entorno DATABASE_URL no está configurada")
+    if ConnectionPool is not None:
+        if _pool is None:
+            _pool = ConnectionPool(DATABASE_URL, min_size=1, max_size=5, open=True)
+        return _pool.connection()
     return psycopg.connect(DATABASE_URL)
+
+# Caché de la verificación de columna: consultar information_schema en cada
+# petición era una consulta extra por request. El esquema solo cambia con una
+# migración, así que 5 minutos de caché sobran (y recogen la migración cuando
+# llegue sin reiniciar el servicio).
+_COLUMNA_TELEGRAM_CACHE = {"valor": None, "comprobado_en": 0.0}
+_COLUMNA_TELEGRAM_TTL = 300  # segundos
 
 def verificar_columna_telegram():
     """
-    Verifica si existe la columna telegram_user_id en la tabla ponentes.
+    Verifica si existe la columna telegram_user_id en la tabla ponentes
+    (resultado cacheado durante _COLUMNA_TELEGRAM_TTL segundos).
     """
-    try:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("""
-                    SELECT 1 
-                    FROM information_schema.columns 
-                    WHERE table_name = 'ponentes' AND column_name = 'telegram_user_id'
-                """)
-                return cur.fetchone() is not None
-    except Exception as e:
-        logger.error(f"Error al verificar columna telegram_user_id: {e}")
-        return False
+    ahora = time.time()
+    if (_COLUMNA_TELEGRAM_CACHE["valor"] is not None
+            and ahora - _COLUMNA_TELEGRAM_CACHE["comprobado_en"] < _COLUMNA_TELEGRAM_TTL):
+        return _COLUMNA_TELEGRAM_CACHE["valor"]
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_name = 'ponentes' AND column_name = 'telegram_user_id'
+            """)
+            existe = cur.fetchone() is not None
+    _COLUMNA_TELEGRAM_CACHE.update(valor=existe, comprobado_en=ahora)
+    return existe
 
 def obtener_ponente_por_telegram(telegram_user_id: str) -> dict | None:
     """
@@ -84,9 +114,12 @@ def obtener_ponente_por_telegram(telegram_user_id: str) -> dict | None:
                             "cargo": row[9],
                             "telegram_user_id": telegram_user_id
                         }
-        except Exception as e:
-            logger.error(f"Error al consultar ponente por telegram_user_id: {e}")
-            
+        except Exception:
+            # antes se silenciaba y se caía al fallback demo; un error de BBDD
+            # debe llegar al cliente como 503, no disfrazarse de "no encontrado"
+            logger.exception("Error al consultar ponente por telegram_user_id")
+            raise
+
     # Fallback si no se encontró en base de datos o si la columna no existe
     if not ponente_data and telegram_user_id in MAPEO_TELEGRAM_DEMO:
         demo = MAPEO_TELEGRAM_DEMO[telegram_user_id]
@@ -117,8 +150,9 @@ def obtener_ponente_por_telegram(telegram_user_id: str) -> dict | None:
                             "cargo": row[9],
                             "telegram_user_id": telegram_user_id
                         }
-        except Exception as e:
-            logger.error(f"Error en fallback de ponente por telegram: {e}")
+        except Exception:
+            logger.exception("Error en fallback de ponente por telegram")
+            raise
 
     # Estructura híbrida compatible tanto con el agente de Telegram (raíz) como con el patch (data)
     if ponente_data:
@@ -156,8 +190,10 @@ def obtener_eventos_activos_ponente(id_ponente: str) -> list:
                         "estado": "activo",  # Por defecto activo si está programado
                         "fecha": fecha_str
                     })
-    except Exception as e:
-        logger.error(f"Error al obtener eventos activos para ponente {id_ponente}: {e}")
+    except Exception:
+        # sin silenciar: una BBDD caída no puede parecer "ponente sin eventos"
+        logger.exception(f"Error al obtener eventos activos para ponente {id_ponente}")
+        raise
     return eventos
 
 def obtener_info_ponente_evento(id_ponente: str, id_evento: str) -> dict | None:
@@ -221,8 +257,9 @@ def obtener_info_ponente_evento(id_ponente: str, id_evento: str) -> dict | None:
                         "sala": "Sala principal", # Campo fijo por defecto en base de datos
                         "documentos_pendientes": docs_pendientes
                     }
-    except Exception as e:
-        logger.error(f"Error al obtener info de ponente {id_ponente} en evento {id_evento}: {e}")
+    except Exception:
+        logger.exception(f"Error al obtener info de ponente {id_ponente} en evento {id_evento}")
+        raise
     return None
 
 def obtener_ponentes_evento(id_evento: str) -> list:
@@ -265,6 +302,7 @@ def obtener_ponentes_evento(id_evento: str) -> list:
                             "horario_ponencia": row[14].isoformat() if hasattr(row[14], 'isoformat') else (str(row[14]) if row[14] else None)
                         }
                     })
-    except Exception as e:
-        logger.error(f"Error al obtener ponentes del evento {id_evento}: {e}")
+    except Exception:
+        logger.exception(f"Error al obtener ponentes del evento {id_evento}")
+        raise
     return ponentes

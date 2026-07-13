@@ -33,6 +33,8 @@ from pathlib import Path
 from flask import Flask, Response, abort, jsonify, request
 # traigo CORS para que el front (en otro dominio) pueda llamar a esta API
 from flask_cors import CORS
+# traigo la excepción base de los errores HTTP para responderlos en JSON
+from werkzeug.exceptions import HTTPException
 
 # traigo el módulo de conexión (compartido con el dedupe) y el histórico
 from vigil import dedupe, history
@@ -58,10 +60,30 @@ _EJECUCIONES: dict[str, dict] = {}
 _INDEX_HTML = Path(__file__).parent / "static" / "index.html"
 
 
-# si no encuentro algo, devuelvo el error en JSON (no en HTML) para el front
-@app.errorhandler(404)
-def _no_encontrado(err):
-    return jsonify({"detail": getattr(err, "description", "No encontrado")}), 404
+# cualquier error HTTP (404, 409…) sale en JSON con el formato común de los
+# agentes ({"error": true, codigo, mensaje}); conservo "detail" porque la web
+# de demostración lee ese campo
+@app.errorhandler(HTTPException)
+def _error_http(err: HTTPException):
+    descripcion = getattr(err, "description", "Error")
+    return jsonify({
+        "error": True,
+        "codigo": f"HTTP_{err.code}",
+        "mensaje": descripcion,
+        "detail": descripcion,
+    }), err.code
+
+
+# si algo revienta de verdad, el front recibe JSON con el contrato de error,
+# nunca la página HTML de error de Flask
+@app.errorhandler(Exception)
+def _error_interno(err: Exception):
+    return jsonify({
+        "error": True,
+        "codigo": "ERROR_INTERNO",
+        "mensaje": str(err),
+        "detail": str(err),
+    }), 500
 
 
 # interpreto un parámetro de query como booleano ("true", "1", "si"… → True)
@@ -214,6 +236,15 @@ def _vigilar(run_id: str, proc: subprocess.Popen, contados_antes: int) -> None:
 # lanzo una ejecución del agente en vivo y devuelvo su identificador
 @app.post("/ejecuciones")
 def crear_ejecucion():
+    # si ya hay una ejecución en curso, no lanzo otra encima: el agente
+    # escribe en el mismo SQLite (riesgo de bloqueo) y el recuento de
+    # "nuevos" saldría mal con dos scrapes a la vez
+    for run_previa in _EJECUCIONES.values():
+        if run_previa["estado"] == "en_curso":
+            abort(409, description=f"Ya hay una ejecución en curso ({run_previa['id']}). Espera a que termine.")
+    # no dejo crecer el registro sin límite: me quedo con las 100 últimas
+    while len(_EJECUCIONES) > 100:
+        _EJECUCIONES.pop(next(iter(_EJECUCIONES)))
     # cuento cuántos concursos hay antes de lanzar, para calcular los nuevos
     with dedupe.get_connection(SQLITE_PATH) as conn:
         contados_antes = history.contar(conn)

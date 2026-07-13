@@ -7,6 +7,8 @@ from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from dotenv import load_dotenv
 
+import psycopg
+
 import database
 
 # Cargar variables de entorno
@@ -22,11 +24,11 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Habilitar CORS
+# Habilitar CORS. Sin allow_credentials: con origins "*" los navegadores
+# rechazan las peticiones con credenciales, y este servicio no usa cookies.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -46,9 +48,23 @@ class IncidenciaPayload(BaseModel):
     descripcion: str = Field(..., description="Detalles de la incidencia")
     urgencia: str = Field("normal", description="Urgencia (baja, normal, alta)")
 
-# Memoria local para POSTs (dado que no tenemos permisos de escritura en el rol del agente)
+# Memoria local para POSTs (dado que no tenemos permisos de escritura en el rol del agente).
+# Con tope: son mocks de demo y no deben crecer sin límite en RAM.
+MAX_REGISTROS_MEMORIA = 500
 registro_comunicaciones = []
 registro_incidencias = []
+
+def _registrar_en_memoria(registro: list, elemento: dict) -> None:
+    registro.append(elemento)
+    if len(registro) > MAX_REGISTROS_MEMORIA:
+        registro.pop(0)
+
+# Sonda uniforme del sistema (misma forma que los agentes): la usan el
+# gateway y comprobar_salud.sh
+@app.get("/health")
+def health():
+    from datetime import datetime
+    return {"estado": "ok", "hora": datetime.now().isoformat()}
 
 @app.get("/")
 def read_root():
@@ -109,7 +125,7 @@ def post_comunicacion(payload: ComunicacionPayload):
     logger.info(f"Petición POST /api/comunicaciones: {payload}")
     comunicacion = payload.model_dump()
     comunicacion["id"] = len(registro_comunicaciones) + 1
-    registro_comunicaciones.append(comunicacion)
+    _registrar_en_memoria(registro_comunicaciones, comunicacion)
     
     # También lo sacamos por consola como log
     logger.info(f"[COMUNICACIÓN REGISTRADA] {comunicacion}")
@@ -125,7 +141,7 @@ def post_incidencia(payload: IncidenciaPayload):
     logger.info(f"Petición POST /api/incidencias: {payload}")
     incidencia = payload.model_dump()
     incidencia["id"] = len(registro_incidencias) + 1
-    registro_incidencias.append(incidencia)
+    _registrar_en_memoria(registro_incidencias, incidencia)
     
     # También lo sacamos por consola como log
     logger.warning(f"[INCIDENCIA REGISTRADA] {incidencia}")
@@ -135,6 +151,24 @@ def post_incidencia(payload: IncidenciaPayload):
         "mensaje": "Incidencia registrada con éxito (memoria local)",
         "data": incidencia
     }
+
+# Una BBDD caída o sin configurar es un 503 explícito: el cliente debe poder
+# distinguir "no hay datos" (200 con lista vacía) de "no puedo consultarlos".
+@app.exception_handler(database.ErrorBaseDatos)
+async def bd_no_configurada_handler(request: Request, exc: Exception):
+    logger.error(f"BBDD no disponible: {exc}")
+    return JSONResponse(
+        status_code=503,
+        content={"ok": False, "message": "Base de datos no disponible", "detail": str(exc)}
+    )
+
+@app.exception_handler(psycopg.Error)
+async def bd_error_handler(request: Request, exc: Exception):
+    logger.error(f"Error de BBDD: {exc}")
+    return JSONResponse(
+        status_code=503,
+        content={"ok": False, "message": "Base de datos no disponible", "detail": str(exc)}
+    )
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):

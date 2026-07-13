@@ -62,9 +62,11 @@ esto se moveria al mismo backend externo (Redis con expiracion nativa) mencionad
 import sys
 import time
 import uuid
+from datetime import datetime
 from pathlib import Path
 
 from flask import Flask, request, jsonify
+from werkzeug.exceptions import HTTPException
 
 BASE_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(BASE_DIR))  # permite "from src.agente import ..." y "from config import ..."
@@ -234,9 +236,29 @@ def chat_reset():
     return jsonify({"ok": True, "sesion_id": sesion_id})
 
 
+# Sonda uniforme del sistema (misma forma que Jano, Vigil y Operis): la usan
+# el gateway y comprobar_salud.sh.
+@app.get("/health")
+def health():
+    return jsonify({"estado": "ok", "hora": datetime.now().isoformat()})
+
+
 @app.errorhandler(404)
 def no_encontrado(e):
     return _error("RUTA_NO_ENCONTRADA", "Esa ruta no existe.", 404)
+
+
+# Los demas errores HTTP (405...) tambien salen en JSON conservando su codigo.
+@app.errorhandler(HTTPException)
+def error_http(e):
+    return _error(f"HTTP_{e.code}", e.description, e.code)
+
+
+# Si el agente revienta, el front recibe el contrato de error en JSON, nunca
+# la pagina HTML de error de Flask.
+@app.errorhandler(Exception)
+def error_interno(e):
+    return _error("ERROR_INTERNO", str(e), 500)
 
 
 if __name__ == "__main__":

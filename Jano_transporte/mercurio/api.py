@@ -12,6 +12,8 @@ Arranque en local:  `python serve_demo_mercurio.py` (demo) o, en producción,
 
 # traigo os para componer la ruta de los PDFs
 import os
+# traigo time para calcular la antigüedad de los PDFs al purgarlos
+import time
 # traigo utilidades de fecha para el sello de tiempo del health
 from datetime import datetime
 # traigo Path para localizar el HTML de la web
@@ -23,6 +25,8 @@ from flask import Flask, abort, jsonify, request, send_file
 from flask_cors import CORS
 # traigo el error de validación de Pydantic para responder 422 como antes
 from pydantic import ValidationError
+# traigo la excepción base de los errores HTTP para responderlos en JSON
+from werkzeug.exceptions import HTTPException
 
 # traigo el servicio de búsqueda y el generador de PDFs
 from mercurio import pdf_report, servicio
@@ -48,13 +52,54 @@ _CARPETA_PDF = os.path.join(OUTPUT_DIR, "pdf")
 def _error_validacion(err: ValidationError):
     # pido los errores sin la url ni el contexto (que puede llevar la excepción
     # original, no serializable a JSON) para poder devolverlos limpios
-    return jsonify({"detail": err.errors(include_url=False, include_context=False)}), 422
+    errores = err.errors(include_url=False, include_context=False)
+    # formato común de los agentes + "detail" para la web de demostración
+    return jsonify({
+        "error": True,
+        "codigo": "VALIDACION",
+        "mensaje": "El cuerpo de la petición no pasa la validación.",
+        "detail": errores,
+    }), 422
 
 
-# si no encuentro algo, devuelvo el error en JSON (no en HTML) para el front
-@app.errorhandler(404)
-def _no_encontrado(err):
-    return jsonify({"detail": getattr(err, "description", "No encontrado")}), 404
+# cualquier error HTTP (404…) sale en JSON con el formato común de los
+# agentes ({"error": true, codigo, mensaje}); conservo "detail" porque la web
+# de demostración lee ese campo
+@app.errorhandler(HTTPException)
+def _error_http(err: HTTPException):
+    descripcion = getattr(err, "description", "Error")
+    return jsonify({
+        "error": True,
+        "codigo": f"HTTP_{err.code}",
+        "mensaje": descripcion,
+        "detail": descripcion,
+    }), err.code
+
+
+# si algo revienta de verdad, el front recibe JSON con el contrato de error,
+# nunca la página HTML de error de Flask
+@app.errorhandler(Exception)
+def _error_interno(err: Exception):
+    return jsonify({
+        "error": True,
+        "codigo": "ERROR_INTERNO",
+        "mensaje": str(err),
+        "detail": str(err),
+    }), 500
+
+
+# borro los informes con más de 7 días para que la carpeta no crezca sin
+# límite (los enlaces de descarga son efímeros: acompañan a cada búsqueda)
+def _purgar_pdfs_antiguos(max_dias: int = 7) -> None:
+    limite = time.time() - max_dias * 86400
+    try:
+        for nombre in os.listdir(_CARPETA_PDF):
+            ruta = os.path.join(_CARPETA_PDF, nombre)
+            if nombre.endswith(".pdf") and os.path.getmtime(ruta) < limite:
+                os.remove(ruta)
+    except OSError:
+        # si la carpeta aún no existe o un borrado falla, no rompo la búsqueda
+        pass
 
 
 # sirvo la web en la raíz (el formulario de búsqueda)
@@ -74,8 +119,14 @@ def health():
 # ejecuto una búsqueda a partir de los campos del formulario
 @app.post("/buscar")
 def buscar():
+    # aprovecho cada búsqueda para limpiar informes antiguos del disco
+    _purgar_pdfs_antiguos()
+    # si el cuerpo no es un objeto JSON, lo digo claro (en vez de un 500)
+    cuerpo = request.get_json(silent=True)
+    if not isinstance(cuerpo, dict):
+        abort(400, description="Manda un objeto JSON con los campos del formulario de búsqueda.")
     # valido el cuerpo JSON contra el molde (Pydantic sigue validando)
-    solicitud = SolicitudBusqueda(**(request.get_json(silent=True) or {}))
+    solicitud = SolicitudBusqueda(**cuerpo)
     # ejecuto la búsqueda (hotel y/o viaje según las casillas)
     propuesta = servicio.buscar(solicitud)
     # genero los dos informes en PDF (ponente y Mitumi)
