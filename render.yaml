@@ -1,0 +1,36 @@
+# =====================================================================
+# Blueprint de Render — sistema de agentes Backstage/Mitümi
+# =====================================================================
+# Un único servicio Docker: dentro del contenedor conviven el gateway
+# (puerta pública), el backend de datos :5004 y los agentes, hablándose
+# por 127.0.0.1 igual que en local. Ver Dockerfile y arrancar_render.sh.
+#
+# Las claves (sync: false) se rellenan en el panel de Render al crear
+# el Blueprint — nunca se escriben en este archivo.
+# =====================================================================
+
+services:
+  - type: web
+    name: backstage-agentes
+    runtime: docker
+    plan: free            # para la demo; "starter" evita que se duerma a los 15 min
+    region: frankfurt     # cerca de Neon (eu-central-1)
+    healthCheckPath: /salud
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL          # rol agente_readonly de Neon
+        sync: false
+      - key: GROQ_API_KEY          # LLM de Lumen/Operis/Jano/Vigil (y Hermes/Garum vía LLM_API_KEY)
+        sync: false
+      - key: LLM_PROVIDER
+        value: groq
+      - key: COMPOSIO_API_KEY      # Gmail de Garum (opcional: sin ella, error controlado)
+        sync: false
+      - key: COMPOSIO_USER_ID
+        value: mitumi_correo_pruebas
+      # Hermes (bot de Telegram) apagado por defecto: solo puede haber UNA
+      # instancia del bot; actívalo aquí solo si no corre en ningún portátil.
+      - key: ARRANCAR_HERMES
+        value: "false"
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false

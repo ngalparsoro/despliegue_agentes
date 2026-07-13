@@ -1,0 +1,20 @@
+# nunca dentro de la imagen: secretos y basura local
+.env
+.env.*
+!.env.example
+.git
+.git.disabled
+.logs
+__pycache__
+*.pyc
+.DS_Store
+nohup.out
+
+# no hacen falta en ejecución (ojo: los PDF de data/ de Hermes SÍ hacen
+# falta — son los documentos de prueba que envía por Telegram)
+docs
+**/tests
+*guia_principiantes*
+**/salida_mercurio*
+**/salida_demo
+Vigil_busquedaconcursos/salida
