@@ -5,7 +5,7 @@
 # Esta aplicación Streamlit permite probar el agente Operis con:
 #   - Subida de archivos (.txt, .pdf, .docx)
 #   - Pegado de texto manual
-#   - id_evento (obligatorio en el contrato) y clave de Groq pegable
+#   - id_evento opcional para probar historico y clave de Groq pegable
 #   - Selector de bloques a actualizar (actualización parcial)
 #   - Histórico LOCAL por id_evento
 #   - Visualización de los 4 bloques:
@@ -563,19 +563,18 @@ def procesar_texto(texto, id_evento, bloques_a_actualizar, usar_historico, modo_
     if not texto or not texto.strip():
         st.warning("No hay texto para procesar.")
         return
-    if not id_evento or not id_evento.strip():
-        st.warning("id_evento es obligatorio (ver barra lateral).")
-        return
+
+    id_evento_normalizado = id_evento.strip() if id_evento and id_evento.strip() else None
 
     contexto = {}
-    if usar_historico:
-        historico = st.session_state.historicos_por_evento.get(id_evento)
+    if usar_historico and id_evento_normalizado:
+        historico = st.session_state.historicos_por_evento.get(id_evento_normalizado)
         if historico and historico.get("versiones"):
             contexto["historial_anterior"] = historico
             contexto["modo_actualizacion"] = modo_actualizacion
 
     payload = {
-        "id_evento": id_evento,
+        "id_evento": id_evento_normalizado,
         "id_registro": None,
         "tipo_peticion": "extraer_briefing",
         "origen": "streamlit",
@@ -597,23 +596,24 @@ def procesar_texto(texto, id_evento, bloques_a_actualizar, usar_historico, modo_
         st.session_state.resultado_actual = resultado
         st.session_state.ultimo_texto_procesado = texto
 
-        historico = st.session_state.historicos_por_evento.setdefault(
-            id_evento, crear_estructura_vacia_historico()
-        )
-        historico["evento_id"] = id_evento
-        historico["versiones"].append({
-            "fecha": datetime.now().isoformat(timespec="seconds"),
-            "archivo": nombre_fuente or "texto manual",
-            "resumen": resultado.get("resumen", ""),
-            "datos": resultado.get("datos_detectados", {})
-        })
-        historico["ultima_actualizacion"] = datetime.now().isoformat(timespec="seconds")
+        if id_evento_normalizado:
+            historico = st.session_state.historicos_por_evento.setdefault(
+                id_evento_normalizado, crear_estructura_vacia_historico()
+            )
+            historico["evento_id"] = id_evento_normalizado
+            historico["versiones"].append({
+                "fecha": datetime.now().isoformat(timespec="seconds"),
+                "archivo": nombre_fuente or "texto manual",
+                "resumen": resultado.get("resumen", ""),
+                "datos": resultado.get("datos_detectados", {})
+            })
+            historico["ultima_actualizacion"] = datetime.now().isoformat(timespec="seconds")
 
         porcentaje = calcular_porcentaje_completado(resultado)
         st.session_state.historial.append({
             "timestamp": datetime.now().strftime("%H:%M:%S"),
             "porcentaje": porcentaje,
-            "id_evento": id_evento
+            "id_evento": id_evento_normalizado or "sin_id_evento"
         })
         if len(st.session_state.historial) > 5:
             st.session_state.historial = st.session_state.historial[-5:]
@@ -864,7 +864,7 @@ if st.session_state.resultado_actual:
         st.json(resultado)
 
 else:
-    st.info("Sube un documento o pega un briefing, rellena el id_evento y pulsa 'Procesar documento'.")
+    st.info("Sube un documento o pega un briefing; si quieres usar historico, rellena el id_evento. Luego pulsa 'Procesar documento'.")
 
 
 # ---------------------------------------------------------------------

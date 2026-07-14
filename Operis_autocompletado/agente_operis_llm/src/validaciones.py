@@ -5,7 +5,7 @@
 # Valida que el payload recibido cumpla con el contrato de entrada.
 #
 # Cambios principales:
-#   - id_evento es OBLIGATORIO (no puede ser None)
+#   - id_evento es opcional: si llega se valida, si no llega se procesa sin historico de evento
 #   - El motor solo puede ser "llm"
 #   - Se valida que contexto.historial_anterior sea un dict si existe
 #   - NUEVO: validación de bloques_a_actualizar (lista de bloques válidos)
@@ -16,7 +16,6 @@
 # 1. CAMPOS OBLIGATORIOS DEL PAYLOAD
 # =====================================================================
 CAMPOS_OBLIGATORIOS = [
-    "id_evento",
     "tipo_peticion",
     "origen",
     "usuario_solicitante",
@@ -24,10 +23,6 @@ CAMPOS_OBLIGATORIOS = [
     "datos",
     "contexto",
     "modo"
-]
-
-CAMPOS_OBLIGATORIOS_DATOS = [
-    "texto_briefing"
 ]
 
 MODOS_VALIDOS = ["propuesta"]
@@ -59,18 +54,14 @@ def validar_entrada(payload):
     for campo in CAMPOS_OBLIGATORIOS:
         if campo not in payload:
             errores.append(f"Falta el campo obligatorio: '{campo}'")
-        elif payload[campo] is None and campo == "id_evento":
-            errores.append("id_evento es obligatorio y no puede ser None")
     
     # Si faltan campos obligatorios, no continuamos con validaciones más profundas
     if errores:
         return errores
     
-    # ----- 2. VALIDAR id_evento (OBLIGATORIO, y contra la BD real si está disponible) -----
+    # ----- 2. VALIDAR id_evento (OPCIONAL; si llega, contra la BD real) -----
     id_evento = payload.get("id_evento")
-    if not id_evento or not str(id_evento).strip():
-        errores.append("id_evento es obligatorio. El agente solo funciona para eventos existentes.")
-    else:
+    if id_evento is not None and str(id_evento).strip():
         # Verificación real, no solo de forma: si hay conexión a la BD
         # (kit_conexion_agentes_Nora, ver integrations/bd_backend.py),
         # se comprueba que el evento exista de verdad, no solo que la
@@ -103,13 +94,11 @@ def validar_entrada(payload):
     if not isinstance(datos, dict):
         errores.append("datos debe ser un diccionario")
     else:
-        # 5.1 Validar campos obligatorios en datos
-        for campo in CAMPOS_OBLIGATORIOS_DATOS:
-            if campo not in datos:
-                errores.append(f"Falta el campo obligatorio en datos: '{campo}'")
-            elif not datos[campo] or not str(datos[campo]).strip():
-                errores.append(f"El campo 'datos.{campo}' no puede estar vacío")
-        
+        # 5.1 Validar texto si se proporciona.
+        if "texto_briefing" in datos and datos["texto_briefing"] is not None:
+            if not str(datos["texto_briefing"]).strip():
+                errores.append("El campo 'datos.texto_briefing' no puede estar vacio si se proporciona")
+
         # 5.2 Validar motor (si existe)
         motor = datos.get("motor", "llm")
         if motor not in MOTORES_VALIDOS:

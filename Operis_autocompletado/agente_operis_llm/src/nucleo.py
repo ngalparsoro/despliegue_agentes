@@ -9,7 +9,7 @@
 # Cambios principales:
 #   - Solo motor LLM (eliminado motor de reglas)
 #   - Acepta historial_anterior en el contexto para modo actualización
-#   - id_evento es obligatorio (para el histórico)
+#   - id_evento es opcional (si llega, permite usar historico)
 #   - Acepta bloques_a_actualizar para actualización parcial
 #   - NUEVO: la protección de bloques no actualizados y la continuidad
 #     del histórico de cambios (nota_bene.informacion_adicional.
@@ -44,7 +44,7 @@ def ejecutar_agente(payload):
     
     Args:
         payload (dict): Contrato de entrada con los siguientes campos:
-            - id_evento (str): OBLIGATORIO. ID del evento para el histórico
+            - id_evento (str, optional): ID del evento para cargar historico si existe
             - id_registro (str, optional)
             - tipo_peticion (str): "extraer_briefing"
             - origen (str): "backend", "manual", etc.
@@ -70,9 +70,10 @@ def ejecutar_agente(payload):
             return _construir_respuesta_error(errores_validacion)
         
         # ----- 2. EXTRAER DATOS DEL PAYLOAD -----
-        texto = payload["datos"]["texto_briefing"]
-        motor = payload["datos"].get("motor", "llm")
-        api_key = payload["datos"].get("groq_api_key")
+        datos_payload = payload.get("datos", {})
+        texto = str(datos_payload.get("texto_briefing") or "").strip()
+        motor = datos_payload.get("motor", "llm")
+        api_key = datos_payload.get("groq_api_key")
         evento_id = payload.get("id_evento")
         historial_anterior = payload.get("contexto", {}).get("historial_anterior")
         modo_actualizacion = payload.get("contexto", {}).get("modo_actualizacion", "fusionar")
@@ -95,7 +96,7 @@ def ejecutar_agente(payload):
                 historial_anterior = None
         
         # NUEVO: Extraer bloques_a_actualizar
-        bloques_a_actualizar = payload["datos"].get("bloques_a_actualizar")
+        bloques_a_actualizar = datos_payload.get("bloques_a_actualizar")
         
         # ----- 3. VERIFICAR MOTOR (SOLO LLM) -----
         if motor != "llm":
@@ -103,10 +104,10 @@ def ejecutar_agente(payload):
                 [f"Motor '{motor}' no soportado. El único motor disponible es 'llm'."]
             )
         
-        # ----- 4. VERIFICAR ID EVENTO (OBLIGATORIO) -----
-        if not evento_id:
+        # ----- 4. VERIFICAR TEXTO A PROCESAR -----
+        if not texto:
             return _construir_respuesta_error(
-                ["id_evento es obligatorio. El agente solo funciona para eventos existentes."]
+                ["No se ha recibido texto para autocompletar. Envia texto, texto_briefing, contenido o datos.texto_briefing."]
             )
         
         # ----- 5. EJECUTAR EXTRACCIÓN CON LLM -----

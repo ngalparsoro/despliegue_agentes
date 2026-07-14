@@ -16,13 +16,16 @@ Por defecto escucha en http://localhost:5002 (el mock de API_Nora usa el 5000 y 
 
 Endpoints:
     GET  /               -> estado del servidor (health check)
-    POST /autocompletar  -> body: {
-                                "id_evento": "...",              (obligatorio)
-                                "texto_briefing": "...",         (obligatorio)
-                                "bloques_a_actualizar": [...],   (opcional, ej. ["nota_bene"])
-                                "historial_anterior": {...}      (opcional; si no se manda y
-                                                                   el evento ya existe en BD,
-                                                                   se autocarga desde ahi)
+    POST /autocompletar  -> body flexible:
+                            {
+                                "id_evento": "...",              (opcional)
+                                "texto_briefing": "...",         (opcional; tambien vale
+                                                                   "texto", "contenido" o
+                                                                   datos.texto_briefing)
+                                "tipo_objetivo": "evento|cliente|ponente|espacio",
+                                "bloques_a_actualizar": [...],   (opcional, ej. ["cliente"])
+                                "historial_anterior": {...}      (opcional; solo se usa si
+                                                                   hay id_evento)
                             }
                             Devuelve el contrato de salida comun del agente: datos_detectados
                             con los 4 bloques (evento, cliente, ponentes, nota_bene),
@@ -33,8 +36,8 @@ Endpoints:
 Notas:
     - El unico motor disponible es "llm" (Groq); el motor de reglas se elimino. Requiere
       GROQ_API_KEY en .env — sin ella, el agente devuelve un error controlado (ver src/llm.py).
-    - "id_evento" es obligatorio: el agente solo funciona sobre eventos existentes, porque
-      lo usa para localizar el historico (ver src/lectura_bd.py / src/nucleo.py).
+    - "id_evento" es opcional: si llega, se usa para localizar el historico del evento; si no
+      llega, se procesa como extraccion inicial sin historico (util para Cliente/Espacio).
     - Este servidor no guarda estado propio: cada peticion es independiente (a diferencia
       del chat de Lumen, aqui no hay memoria de conversacion que mantener); el historico de
       actualizaciones vive en la BD del proyecto, no en este proceso.
@@ -67,13 +70,31 @@ def _error(codigo, mensaje, http=400):
     return jsonify({"error": True, "codigo": codigo, "mensaje": mensaje}), http
 
 
+def _texto_limpio(valor):
+    if valor is None:
+        return ""
+    return str(valor).strip()
+
+
+def _extraer_texto(cuerpo):
+    datos = cuerpo.get("datos") if isinstance(cuerpo.get("datos"), dict) else {}
+    for clave in ("texto_briefing", "texto", "contenido", "descripcion", "prompt"):
+        texto = _texto_limpio(cuerpo.get(clave))
+        if texto:
+            return texto
+        texto = _texto_limpio(datos.get(clave))
+        if texto:
+            return texto
+    return ""
+
+
 @app.get("/")
 def inicio():
     return jsonify({
         "servicio": "agente_operis - autocompletar briefings",
         "estado": "en marcha",
         "motor_por_defecto": settings.MOTOR_POR_DEFECTO,
-        "prueba": 'POST /autocompletar con {"texto_briefing": "..."}',
+        "prueba": 'POST /autocompletar con {"texto": "...", "tipo_objetivo": "cliente"}',
     })
 
 
@@ -101,34 +122,47 @@ def _error_interno(exc):
 @app.post("/autocompletar")
 def autocompletar():
     cuerpo = request.get_json(silent=True)
-    if not cuerpo or not isinstance(cuerpo, dict):
-        return _error("CUERPO_INVALIDO", "Manda un JSON con al menos 'id_evento' y 'texto_briefing'.")
+    if cuerpo is None:
+        cuerpo = {}
+    if not isinstance(cuerpo, dict):
+        return _error("CUERPO_INVALIDO", "El cuerpo debe ser un objeto JSON.")
 
-    id_evento = cuerpo.get("id_evento")
-    if not id_evento:
-        return _error("CAMPO_OBLIGATORIO", "El campo 'id_evento' es obligatorio: el agente solo funciona sobre eventos existentes.")
+    datos = cuerpo.get("datos") if isinstance(cuerpo.get("datos"), dict) else {}
+    contexto = cuerpo.get("contexto") if isinstance(cuerpo.get("contexto"), dict) else {}
 
-    texto_briefing = (cuerpo.get("texto_briefing") or "").strip()
+    id_evento = _texto_limpio(cuerpo.get("id_evento") or request.args.get("id_evento")) or None
+    texto_briefing = _extraer_texto(cuerpo) or _texto_limpio(
+        request.args.get("texto_briefing")
+        or request.args.get("texto")
+        or request.args.get("contenido")
+    )
     if not texto_briefing:
-        return _error("CAMPO_OBLIGATORIO", "El campo 'texto_briefing' es obligatorio.")
+        return _error(
+            "TEXTO_NO_RECIBIDO",
+            "No se ha recibido texto para autocompletar. Envia 'texto', 'texto_briefing', 'contenido' o 'datos.texto_briefing'.",
+            http=422,
+        )
 
     # El unico motor disponible es "llm" (el motor de reglas se elimino).
-    motor = cuerpo.get("motor") or settings.MOTOR_POR_DEFECTO
+    motor = cuerpo.get("motor") or datos.get("motor") or settings.MOTOR_POR_DEFECTO
     if motor != "llm":
         return _error("MOTOR_INVALIDO", "El unico motor disponible es 'llm'.")
 
-    bloques_a_actualizar = cuerpo.get("bloques_a_actualizar")
+    bloques_a_actualizar = cuerpo.get("bloques_a_actualizar", datos.get("bloques_a_actualizar"))
     if bloques_a_actualizar is not None and not isinstance(bloques_a_actualizar, list):
         return _error("CAMPO_INVALIDO", "'bloques_a_actualizar' debe ser una lista, ej. [\"nota_bene\"].")
 
-    historial_anterior = cuerpo.get("historial_anterior")
+    historial_anterior = cuerpo.get("historial_anterior", contexto.get("historial_anterior"))
     if historial_anterior is not None and not isinstance(historial_anterior, dict):
         return _error("CAMPO_INVALIDO", "'historial_anterior' debe ser un objeto JSON.")
 
+    tipo_objetivo = _texto_limpio(cuerpo.get("tipo_objetivo") or cuerpo.get("objetivo") or datos.get("tipo_objetivo") or "evento")
+
     # Se construye el contrato de entrada comun del agente (README.md, seccion 9.2):
-    # el front manda id_evento + texto (+ opcionalmente bloques_a_actualizar/historial_anterior),
-    # el resto lo fija esta capa. Si no se manda historial_anterior, src/nucleo.py intenta
-    # autocargarlo desde la BD real a partir de id_evento (ver src/lectura_bd.py).
+    # el front puede mandar id_evento + texto si trabaja sobre un evento ya creado,
+    # o solo texto/tipo_objetivo para pantallas independientes como Cliente/Espacio.
+    # Si llega id_evento y no llega historial_anterior, src/nucleo.py intentara
+    # autocargarlo desde la BD real (ver src/lectura_bd.py).
     payload = {
         "id_evento": id_evento,
         "id_registro": None,
@@ -140,6 +174,7 @@ def autocompletar():
             "texto_briefing": texto_briefing,
             "motor": motor,
             "bloques_a_actualizar": bloques_a_actualizar,
+            "tipo_objetivo": tipo_objetivo,
         },
         "contexto": {
             "historial_anterior": historial_anterior,
