@@ -45,6 +45,7 @@ Notas:
 
 import json
 import sys
+import tempfile
 from pathlib import Path
 
 from flask import Flask, request, jsonify
@@ -54,6 +55,7 @@ BASE_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(BASE_DIR))  # permite "from src.agente import ..." y "from config import ..."
 
 from src.agente import ejecutar_agente  # noqa: E402
+from src.lectura_archivos import leer_archivo  # noqa: E402
 from config import settings  # noqa: E402
 
 app = Flask(__name__)
@@ -123,6 +125,21 @@ def _decodificar_archivo_subido(archivo):
     contenido = archivo.read()
     if not contenido:
         return ""
+
+    extension = Path(archivo.filename or "").suffix.lower()
+    if extension in {".txt", ".pdf", ".docx"}:
+        ruta_temporal = None
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=extension) as temporal:
+                temporal.write(contenido)
+                ruta_temporal = temporal.name
+            return leer_archivo(ruta_temporal).strip()
+        finally:
+            if ruta_temporal:
+                Path(ruta_temporal).unlink(missing_ok=True)
+
+    # Compatibilidad: si el front manda un blob sin extension pero es texto plano,
+    # intentamos leerlo como texto antes de rechazarlo.
     for encoding in ("utf-8-sig", "utf-8", "cp1252", "latin-1"):
         try:
             return contenido.decode(encoding).strip()
@@ -201,7 +218,7 @@ def autocompletar():
     if not texto_briefing:
         return _error(
             "TEXTO_NO_RECIBIDO",
-            "No se ha recibido texto para autocompletar. Envia 'texto', 'texto_briefing', 'contenido', 'datos.texto_briefing' o un archivo multipart.",
+            "No se ha recibido texto para autocompletar. Envia 'texto', 'texto_briefing', 'contenido', 'datos.texto_briefing' o un archivo multipart .txt, .pdf o .docx.",
             http=422,
         )
 

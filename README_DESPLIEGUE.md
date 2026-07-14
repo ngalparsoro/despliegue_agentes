@@ -27,6 +27,6 @@ tests, docs ni salidas de demo. La documentación completa vive en el repo
 | Puerto | Servicio |
 |---|---|
 | **5003** | **Gateway — única URL para el front** (`/agentes/...`, `/salud`, `/docs`) |
-| 5001 | Lumen (chat) · 5002 Operis (briefings) · 8000 Vigil (concursos) · 8001 Jano (transporte) |
+| 5001 | Lumen (chat) · 5002 Operis (autocompletado desde texto o archivo `.txt`/`.pdf`/`.docx`) · 8000 Vigil (concursos) · 8001 Jano (transporte) |
 | 5004 | Backend de datos para agentes (Neon readonly) |
 | — | Hermes (bot Telegram, `--con-hermes`) · Garum (por ciclos: `POST :5003/agentes/garum/ciclos`) |
