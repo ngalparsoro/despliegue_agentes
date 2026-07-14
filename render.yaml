@@ -34,3 +34,5 @@ services:
         value: "false"
       - key: TELEGRAM_BOT_TOKEN
         sync: false
+      - key: EVENT_ACTIVE_STATES
+        value: Planificado,Reservado,Confirmado

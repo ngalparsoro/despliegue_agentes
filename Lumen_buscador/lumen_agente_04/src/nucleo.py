@@ -54,36 +54,49 @@ PALABRAS_ESCRITURA = [
 PALABRAS_USUARIOS = ["usuarios", "contraseña", "password", "credencial", "credenciales"]
 
 # --- Consultas transversales por estado de evento (sin id_evento) --------------------------
-# Las claves son las descripciones EXACTAS de la tabla `estados` en la BD real (confirmadas en
-# vivo preguntandole a Lumen "¿que estados hay?") - tienen que coincidir tal cual, porque
-# lectura_datos.eventos_por_estado compara por igualdad exacta contra estados.descripcion, acentos
-# y mayusculas incluidos. Antes esta lista tenia 3 estados inventados de un dataset de referencia
-# que nunca existieron en la BD real, lo que hacia que "cuantos eventos hay en ejecucion?" no
-# reconociera ningun estado y cayera silenciosamente a listar TODOS los eventos sin filtrar.
+# Catalogo real de `public.estados` actualizado el 14/07/2026:
+# 0. Planificado -> evento creado en la app; lo activa el boton "crear evento".
+# 1. Reservado   -> sala/espacio seleccionado o reservado; lo activa "Reservar lugar".
+# 2. Confirmado  -> cliente acepta lugar y presupuesto; requiere "confirmar lugar" +
+#                  "confirmar presupuesto".
+# 3. Finalizado  -> evento ya celebrado; no tiene boton, se activa el dia posterior al evento.
+# 4. Cancelado   -> evento no se realiza; lo activa "Cancelar evento" con doble validacion.
+#
+# Las claves de SINONIMOS_ESTADO_EVENTO deben coincidir EXACTAMENTE con estados.descripcion,
+# porque lectura_datos.eventos_por_estado compara por igualdad contra la BD. Los nombres antiguos
+# se conservan solo como sinonimos para que Lumen entienda preguntas formuladas con el catalogo
+# previo o con etiquetas del prototipo. El dict prioriza "Reservado" antes que "Planificado" para
+# que "pre-reservado" no se confunda con "pre-evento" por la tolerancia a errores tipograficos.
 SINONIMOS_ESTADO_EVENTO = {
-    "Borrador": ["borrador", "borradores", "en borrador"],
-    "Presupuestado": ["presupuestado", "presupuestados", "con presupuesto", "presupuestada"],
-    "Pendiente de aprobación": [
-        "pendiente de aprobacion", "pendientes de aprobacion", "por aprobar", "pendiente",
-        "pendientes", "por confirmar",
+    "Reservado": [
+        "reservado", "reservados", "reservada", "reservadas", "reservar lugar",
+        "lugar reservado", "sala reservada", "espacio reservado", "con sala", "con espacio",
+        "pre-reservado", "pre reservado", "pre-reserva", "pre reserva", "presupuestado",
+        "presupuestados", "con presupuesto", "pendiente de aprobacion",
+        "pendientes de aprobacion", "por aprobar", "pendiente", "pendientes", "por confirmar",
     ],
-    # "cerrado" se mantiene aqui (no en Facturado/Celebrado) porque "dime eventos cerrados" ya se
-    # verifico en vivo con el usuario devolviendo eventos Confirmado - no tocar sin confirmar antes.
-    "Confirmado": ["confirmado", "confirmados", "confirmada", "confirmadas", "cerrado", "cerrados"],
-    "En ejecución": [
-        "en ejecucion", "ejecucion", "en curso", "en marcha", "activo", "activos", "curso",
+    "Planificado": [
+        "planificado", "planificados", "planificada", "planificadas", "en planificacion",
+        "en planificación", "fase inicial", "creado", "creados", "evento creado",
+        "crear evento", "pre-evento", "pre evento", "borrador", "borradores", "en borrador",
     ],
-    "Celebrado": ["celebrado", "celebrados", "celebrada", "finalizado", "finalizados", "terminado", "terminados"],
+    "Confirmado": [
+        "confirmado", "confirmados", "confirmada", "confirmadas", "cerrado", "cerrados",
+        "pre-confirmado", "pre confirmado", "lugar confirmado", "presupuesto confirmado",
+        "confirmar lugar", "confirmar presupuesto", "lugar y presupuesto aceptados",
+        "cliente acepta lugar", "cliente acepta presupuesto",
+    ],
+    "Finalizado": [
+        "finalizado", "finalizados", "finalizada", "finalizadas", "celebrado", "celebrados",
+        "celebrada", "celebradas", "terminado", "terminados", "terminada", "terminadas",
+        "facturado", "facturados", "facturada", "facturadas", "evento celebrado",
+    ],
     "Cancelado": ["cancelado", "cancelados", "cancelada", "canceladas"],
-    "Facturado": ["facturado", "facturados", "facturada", "facturadas"],
 }
 
-# Se deriva de SINONIMOS_ESTADO_EVENTO en vez de mantener una lista aparte a mano: antes "cerrado"
-# (sinonimo real de "confirmado") no estaba aqui, asi que "dime eventos cerrados" nunca llegaba a
-# _detectar_estado_pedido y caia al mensaje generico de "necesito id_evento" en vez de responder
-# sobre el estado. Con esto, cualquier sinonimo nuevo que se añada a SINONIMOS_ESTADO_EVENTO queda
-# reconocido automaticamente aqui tambien.
-PALABRAS_TRANSVERSAL_ESTADO = ["estado", "pre-evento", "pre evento"]
+# Se deriva de SINONIMOS_ESTADO_EVENTO en vez de mantener una lista aparte a mano. Asi cualquier
+# sinonimo nuevo que se añada al catalogo queda reconocido automaticamente como consulta por estado.
+PALABRAS_TRANSVERSAL_ESTADO = ["estado"]
 for _sinonimos in SINONIMOS_ESTADO_EVENTO.values():
     PALABRAS_TRANSVERSAL_ESTADO.extend(_sinonimos)
 

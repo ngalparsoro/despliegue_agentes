@@ -1,17 +1,16 @@
 # knowledge/status_3.py
 
-# Estados del evento (tabla `estados`). Verificado 1:1 contra
-# Datos_alimentación_bbdd_Leire_Eduardo/estados.csv (id_estado,
-# descripcion) — es un catálogo cerrado, no una muestra parcial.
+# Estados del evento (tabla `public.estados`). Catalogo real actualizado el
+# 14/07/2026 tras simplificar el flujo operativo a 5 estados.
+# Planificado -> crear evento; Reservado -> reservar lugar; Confirmado ->
+# confirmar lugar + confirmar presupuesto; Finalizado -> dia posterior al
+# evento; Cancelado -> cancelar evento con doble validacion.
 EVENT_STATUS = [
-    "Borrador",
-    "Presupuestado",
-    "Pendiente de aprobación",
+    "Planificado",
+    "Reservado",
     "Confirmado",
-    "En ejecución",
-    "Celebrado",
+    "Finalizado",
     "Cancelado",
-    "Facturado"
 ]
 
 # Estado del presupuesto (columna `estado_presupuesto` de la tabla

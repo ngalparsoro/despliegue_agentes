@@ -37,9 +37,11 @@ TELEGRAM_CHECK_SECONDS = int(os.getenv("TELEGRAM_CHECK_SECONDS", "15"))
 # PostgreSQL / Neon, única fuente operativa de datos
 DATABASE_URL = os.getenv("DATABASE_URL")
 DB_CONNECT_TIMEOUT_SECONDS = int(os.getenv("DB_CONNECT_TIMEOUT_SECONDS", "10"))
+# Hermes solo muestra eventos operativamente activos para el ponente.
+# Finalizado y Cancelado quedan fuera porque ya no requieren seguimiento por Telegram.
 EVENT_ACTIVE_STATES = _lista(
     "EVENT_ACTIVE_STATES",
-    "Activo,Evento activo,Confirmado,En preparación,En preparacion,Preparación,Preparacion",
+    "Planificado,Reservado,Confirmado",
 )
 
 # Servicio local

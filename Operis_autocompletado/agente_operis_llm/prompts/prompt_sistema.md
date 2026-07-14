@@ -49,7 +49,7 @@ Debes devolver un JSON con esta estructura EXACTA:
 | fecha_fin | Fecha de fin (DD/MM/AAAA) | "17/10/2026" |
 | numero_personas | Número estimado de asistentes | "250" |
 | tipo_evento | Tipo de evento | "Congreso", "Conferencia", "Workshop" |
-| estado | Estado del evento (si se menciona) | "Confirmado", "En planificación" |
+| estado | Estado del evento (si se menciona) | "Planificado", "Confirmado" |
 | nota | Observaciones generales | "Evento con aforo limitado" |
 
 **Importante:**
@@ -139,7 +139,7 @@ en tu respuesta, con sus tres partes, aunque el texto sea breve.**
 | Campo | Qué extraer | Ejemplo |
 |-------|-------------|---------|
 | nombre_evento | Igual que evento.nombre_evento (duplicado a propósito, para que la cabecera sea autocontenida) | "Congreso Internacional de Sostenibilidad y Energía" |
-| estado_evento | Estado del evento si se menciona | "En planificación" |
+| estado_evento | Estado del evento si se menciona | "Planificado" |
 | fecha_celebracion | Rango de fechas en un único texto | "20-22/09/2027" |
 | cliente_principal | Igual que cliente.cliente | "Global Solutions Corp." |
 | persona_contacto | Nombre de la persona de contacto principal (la primera de personas_contacto, o la más relevante) | "Laura Fernández" |
