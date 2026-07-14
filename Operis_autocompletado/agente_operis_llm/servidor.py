@@ -43,6 +43,7 @@ Notas:
       actualizaciones vive en la BD del proyecto, no en este proceso.
 """
 
+import json
 import sys
 from pathlib import Path
 
@@ -88,6 +89,59 @@ def _extraer_texto(cuerpo):
     return ""
 
 
+def _parsear_lista(valor):
+    if valor is None or valor == "":
+        return None
+    if isinstance(valor, list):
+        return [str(item).strip() for item in valor if str(item).strip()]
+    if isinstance(valor, tuple):
+        return [str(item).strip() for item in valor if str(item).strip()]
+    texto = str(valor).strip()
+    if not texto:
+        return None
+    try:
+        parsed = json.loads(texto)
+        if isinstance(parsed, list):
+            return [str(item).strip() for item in parsed if str(item).strip()]
+    except json.JSONDecodeError:
+        pass
+    return [item.strip() for item in texto.split(",") if item.strip()]
+
+
+def _valor_formulario(nombre, cuerpo=None, datos=None):
+    cuerpo = cuerpo or {}
+    datos = datos or {}
+    return (
+        cuerpo.get(nombre)
+        or datos.get(nombre)
+        or request.form.get(nombre)
+        or request.args.get(nombre)
+    )
+
+
+def _decodificar_archivo_subido(archivo):
+    contenido = archivo.read()
+    if not contenido:
+        return ""
+    for encoding in ("utf-8-sig", "utf-8", "cp1252", "latin-1"):
+        try:
+            return contenido.decode(encoding).strip()
+        except UnicodeDecodeError:
+            continue
+    return contenido.decode("utf-8", errors="ignore").strip()
+
+
+def _extraer_texto_archivo():
+    if not request.files:
+        return ""
+    for nombre in ("archivo", "file", "documento", "upload"):
+        archivo = request.files.get(nombre)
+        if archivo:
+            return _decodificar_archivo_subido(archivo)
+    primer_archivo = next(iter(request.files.values()), None)
+    return _decodificar_archivo_subido(primer_archivo) if primer_archivo else ""
+
+
 @app.get("/")
 def inicio():
     return jsonify({
@@ -121,7 +175,7 @@ def _error_interno(exc):
 
 @app.post("/autocompletar")
 def autocompletar():
-    cuerpo = request.get_json(silent=True)
+    cuerpo = request.get_json(silent=True) if request.is_json else None
     if cuerpo is None:
         cuerpo = {}
     if not isinstance(cuerpo, dict):
@@ -130,33 +184,47 @@ def autocompletar():
     datos = cuerpo.get("datos") if isinstance(cuerpo.get("datos"), dict) else {}
     contexto = cuerpo.get("contexto") if isinstance(cuerpo.get("contexto"), dict) else {}
 
-    id_evento = _texto_limpio(cuerpo.get("id_evento") or request.args.get("id_evento")) or None
-    texto_briefing = _extraer_texto(cuerpo) or _texto_limpio(
-        request.args.get("texto_briefing")
-        or request.args.get("texto")
-        or request.args.get("contenido")
+    id_evento = _texto_limpio(_valor_formulario("id_evento", cuerpo, datos)) or None
+    texto_briefing = (
+        _extraer_texto(cuerpo)
+        or _texto_limpio(
+            request.form.get("texto_briefing")
+            or request.form.get("texto")
+            or request.form.get("contenido")
+            or request.form.get("descripcion")
+            or request.args.get("texto_briefing")
+            or request.args.get("texto")
+            or request.args.get("contenido")
+        )
+        or _extraer_texto_archivo()
     )
     if not texto_briefing:
         return _error(
             "TEXTO_NO_RECIBIDO",
-            "No se ha recibido texto para autocompletar. Envia 'texto', 'texto_briefing', 'contenido' o 'datos.texto_briefing'.",
+            "No se ha recibido texto para autocompletar. Envia 'texto', 'texto_briefing', 'contenido', 'datos.texto_briefing' o un archivo multipart.",
             http=422,
         )
 
     # El unico motor disponible es "llm" (el motor de reglas se elimino).
-    motor = cuerpo.get("motor") or datos.get("motor") or settings.MOTOR_POR_DEFECTO
+    motor = _valor_formulario("motor", cuerpo, datos) or settings.MOTOR_POR_DEFECTO
     if motor != "llm":
         return _error("MOTOR_INVALIDO", "El unico motor disponible es 'llm'.")
 
-    bloques_a_actualizar = cuerpo.get("bloques_a_actualizar", datos.get("bloques_a_actualizar"))
+    bloques_a_actualizar = _parsear_lista(_valor_formulario("bloques_a_actualizar", cuerpo, datos))
     if bloques_a_actualizar is not None and not isinstance(bloques_a_actualizar, list):
         return _error("CAMPO_INVALIDO", "'bloques_a_actualizar' debe ser una lista, ej. [\"nota_bene\"].")
+
+    campos_objetivo = _parsear_lista(_valor_formulario("campos_objetivo", cuerpo, datos))
 
     historial_anterior = cuerpo.get("historial_anterior", contexto.get("historial_anterior"))
     if historial_anterior is not None and not isinstance(historial_anterior, dict):
         return _error("CAMPO_INVALIDO", "'historial_anterior' debe ser un objeto JSON.")
 
-    tipo_objetivo = _texto_limpio(cuerpo.get("tipo_objetivo") or cuerpo.get("objetivo") or datos.get("tipo_objetivo") or "evento")
+    tipo_objetivo = _texto_limpio(
+        _valor_formulario("tipo_objetivo", cuerpo, datos)
+        or _valor_formulario("objetivo", cuerpo, datos)
+        or "evento"
+    )
 
     # Se construye el contrato de entrada comun del agente (README.md, seccion 9.2):
     # el front puede mandar id_evento + texto si trabaja sobre un evento ya creado,
@@ -175,6 +243,7 @@ def autocompletar():
             "motor": motor,
             "bloques_a_actualizar": bloques_a_actualizar,
             "tipo_objetivo": tipo_objetivo,
+            "campos_objetivo": campos_objetivo,
         },
         "contexto": {
             "historial_anterior": historial_anterior,

@@ -126,7 +126,12 @@ def _esquema_para_prompt():
 # =====================================================================
 # 2. CONSTRUCCIÓN DEL PROMPT DE SISTEMA
 # =====================================================================
-def construir_prompt_sistema(historial_anterior=None, bloques_a_actualizar=None):
+def construir_prompt_sistema(
+    historial_anterior=None,
+    bloques_a_actualizar=None,
+    tipo_objetivo=None,
+    campos_objetivo=None,
+):
     """
     Carga prompts/prompt_sistema.md y le inserta el esquema de salida.
 
@@ -229,6 +234,23 @@ del estado actual mostrado arriba, tanto si los incluyes como si no.
 No se han especificado bloques concretos a actualizar. Actualiza todos
 los bloques que el nuevo documento modifique, fusionando con el estado
 actual mostrado arriba.
+
+"""
+
+    if tipo_objetivo:
+        campos_texto = ", ".join(campos_objetivo or [])
+        prompt += f"""
+
+# =====================================================================
+# PANTALLA OBJETIVO
+# =====================================================================
+
+Estas autocompletando la pantalla o entidad: **{tipo_objetivo}**.
+Campos visibles que se intentan rellenar: **{campos_texto or "no especificados"}**.
+
+Extrae solo informacion que aparezca en el texto. Si un campo no aparece,
+dejalo vacio. No inventes datos y no trates los campos ausentes como error:
+la aplicacion validara antes de guardar.
 
 """
 
@@ -398,7 +420,15 @@ def _fusionar_sobre_plantilla(datos_llm):
 # =====================================================================
 # 4. FUNCIÓN PRINCIPAL DE EXTRACCIÓN
 # =====================================================================
-def extraer_briefing_llm(texto, api_key=None, model=None, historial_anterior=None, bloques_a_actualizar=None):
+def extraer_briefing_llm(
+    texto,
+    api_key=None,
+    model=None,
+    historial_anterior=None,
+    bloques_a_actualizar=None,
+    tipo_objetivo=None,
+    campos_objetivo=None,
+):
     """
     Extrae la información del briefing usando un LLM en Groq.
     
@@ -437,7 +467,9 @@ def extraer_briefing_llm(texto, api_key=None, model=None, historial_anterior=Non
     # Construir prompt con histórico y bloques a actualizar
     prompt_sistema = construir_prompt_sistema(
         historial_anterior=historial_anterior,
-        bloques_a_actualizar=bloques_a_actualizar
+        bloques_a_actualizar=bloques_a_actualizar,
+        tipo_objetivo=tipo_objetivo,
+        campos_objetivo=campos_objetivo
     )
     
     respuesta = cliente_groq.chat.completions.create(
@@ -464,7 +496,11 @@ def extraer_briefing_llm(texto, api_key=None, model=None, historial_anterior=Non
     resultado = _fusionar_sobre_plantilla(datos_llm)
     
     # Añadir validación y avisos
-    resultado = generar_aviso_y_validacion(resultado)
+    resultado = generar_aviso_y_validacion(
+        resultado,
+        tipo_objetivo=tipo_objetivo or "evento",
+        campos_objetivo=campos_objetivo
+    )
     
     # Si hay histórico anterior, añadir timestamp de actualización
     if historial_anterior:

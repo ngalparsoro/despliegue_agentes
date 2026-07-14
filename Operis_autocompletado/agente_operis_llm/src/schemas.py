@@ -30,6 +30,49 @@ CAMPOS_OBLIGATORIOS_EVENTO = [
     "tipo_evento"
 ]
 
+CAMPOS_OBJETIVO_DEFAULT = {
+    "evento": CAMPOS_OBLIGATORIOS_EVENTO,
+    "cliente": ["cliente", "empresa", "email", "telefono", "sector", "ciudad"],
+    "ponente": ["nombre_ponente", "email", "telefono", "sector", "empresa", "cargo"],
+    "ponentes": ["nombre_ponente", "email", "telefono", "sector", "empresa", "cargo"],
+}
+
+TIPO_OBJETIVO_A_BLOQUE = {
+    "evento": "evento",
+    "cliente": "cliente",
+    "ponente": "ponentes",
+    "ponentes": "ponentes",
+}
+
+
+def _normalizar_tipo_objetivo(tipo_objetivo):
+    return str(tipo_objetivo or "evento").strip().lower() or "evento"
+
+
+def _normalizar_campos_objetivo(campos_objetivo):
+    if not campos_objetivo:
+        return []
+    return [str(campo).strip() for campo in campos_objetivo if str(campo).strip()]
+
+
+def _valor_presente(valor):
+    if isinstance(valor, list):
+        return any(_valor_presente(item) for item in valor)
+    if isinstance(valor, dict):
+        return any(_valor_presente(item) for item in valor.values())
+    return valor is not None and str(valor).strip() != ""
+
+
+def _campo_detectado_en_bloque(datos_bloque, campo):
+    if isinstance(datos_bloque, dict):
+        return _valor_presente(datos_bloque.get(campo))
+    if isinstance(datos_bloque, list):
+        return any(
+            isinstance(item, dict) and _valor_presente(item.get(campo))
+            for item in datos_bloque
+        )
+    return False
+
 
 # =====================================================================
 # 2. ESTRUCTURA VACÍA COMPLETA (4 BLOQUES)
@@ -233,10 +276,15 @@ def extraer_ultimo_estado(historial_anterior):
 # =====================================================================
 # 4. GENERAR VALIDACIÓN Y AVISOS
 # =====================================================================
-def generar_aviso_y_validacion(datos):
+def generar_aviso_y_validacion(datos, tipo_objetivo="evento", campos_objetivo=None):
     """
-    Calcula el porcentaje de completado de los campos obligatorios del evento
-    y genera un mensaje de aviso para el usuario.
+    Calcula una validacion contextual para la pantalla que invoca al agente.
+
+    Para `tipo_objetivo="evento"` mantiene la validacion historica de campos
+    obligatorios del evento. Para pantallas independientes como `cliente`, el
+    agente solo informa de campos detectados/no detectados: no bloquea ni marca
+    error por campos vacios. La validacion obligatoria antes de guardar pertenece
+    al front/backend, no al agente.
     
     Args:
         datos (dict): Datos extraídos (debe contener la clave "evento")
@@ -244,6 +292,43 @@ def generar_aviso_y_validacion(datos):
     Returns:
         dict: Los mismos datos con las claves "_validacion" y "_aviso_agente" añadidas
     """
+    tipo = _normalizar_tipo_objetivo(tipo_objetivo)
+    campos = (
+        _normalizar_campos_objetivo(campos_objetivo)
+        or CAMPOS_OBJETIVO_DEFAULT.get(tipo, [])
+    )
+
+    if tipo != "evento":
+        bloque = TIPO_OBJETIVO_A_BLOQUE.get(tipo, tipo)
+        datos_bloque = datos.get(bloque, {})
+        detectados = []
+        no_detectados = []
+
+        for campo in campos:
+            if _campo_detectado_en_bloque(datos_bloque, campo):
+                detectados.append(campo)
+            else:
+                no_detectados.append(campo)
+
+        total = len(campos)
+        porcentaje = int((len(detectados) / total) * 100) if total > 0 else 0
+
+        datos["_validacion"] = {
+            "tipo_objetivo": tipo,
+            "campos_objetivo": campos,
+            "campos_detectados": detectados,
+            "campos_no_detectados": no_detectados,
+            "porcentaje_completado": porcentaje,
+            "campos_pendientes": []
+        }
+        datos["_aviso_agente"] = {
+            "mensaje": (
+                f"Autocompletado de {tipo}: {len(detectados)}/{total} "
+                "campos detectados. Revisa la propuesta antes de guardar."
+            )
+        }
+        return datos
+
     evento = datos.get("evento", {})
     
     completados = 0
@@ -294,15 +379,22 @@ def construir_salida_base(datos_detectados, motor_usado, errores=None):
         dict: Salida completa del agente
     """
     es_ok = errores is None or len(errores) == 0
+    validacion = datos_detectados.get("_validacion", {})
+    tipo_objetivo = validacion.get("tipo_objetivo", "evento")
+    bloqueos = validacion.get("campos_pendientes", []) if tipo_objetivo == "evento" else []
     
     salida = {
         "ok": es_ok,
         "agente": "agente_operis",
         "tipo_peticion": "extraer_briefing",
+        "tipo_objetivo": tipo_objetivo,
         "resumen": _generar_resumen(datos_detectados),
         "datos_detectados": datos_detectados,
         "acciones_propuestas": [],
-        "bloqueos_detectados": datos_detectados.get("_validacion", {}).get("campos_pendientes", []),
+        "bloqueos_detectados": bloqueos,
+        "campos_objetivo": validacion.get("campos_objetivo", []),
+        "campos_detectados": validacion.get("campos_detectados", []),
+        "campos_no_detectados": validacion.get("campos_no_detectados", []),
         "borradores_generados": [],
         "requiere_validacion_humana": True,   # SIEMPRE True
         "nivel_riesgo": "bajo",               # SIEMPRE "bajo"
@@ -335,6 +427,17 @@ def _generar_resumen(datos):
     """
     validacion = datos.get("_validacion", {})
     porcentaje = validacion.get("porcentaje_completado", 0)
+    tipo_objetivo = validacion.get("tipo_objetivo", "evento")
+
+    if tipo_objetivo != "evento":
+        detectados = validacion.get("campos_detectados", [])
+        objetivo = validacion.get("campos_objetivo", [])
+        total = len(objetivo)
+        return (
+            f"Autocompletado de {tipo_objetivo}: "
+            f"{len(detectados)}/{total} campos detectados. "
+            "Requiere validacion humana antes de guardar."
+        )
     
     # Contar bloques con información
     bloques_con_info = 0

@@ -33,6 +33,12 @@ from src.schemas import (
 )
 
 BLOQUES_PRINCIPALES = ["evento", "cliente", "ponentes", "nota_bene"]
+TIPO_OBJETIVO_A_BLOQUES = {
+    "evento": ["evento"],
+    "cliente": ["cliente"],
+    "ponente": ["ponentes"],
+    "ponentes": ["ponentes"],
+}
 
 
 # =====================================================================
@@ -77,6 +83,10 @@ def ejecutar_agente(payload):
         evento_id = payload.get("id_evento")
         historial_anterior = payload.get("contexto", {}).get("historial_anterior")
         modo_actualizacion = payload.get("contexto", {}).get("modo_actualizacion", "fusionar")
+        tipo_objetivo = str(datos_payload.get("tipo_objetivo") or "evento").strip().lower() or "evento"
+        campos_objetivo = datos_payload.get("campos_objetivo")
+        if isinstance(campos_objetivo, str):
+            campos_objetivo = [campo.strip() for campo in campos_objetivo.split(",") if campo.strip()]
 
         # Si quien llama no pasó contexto.historial_anterior explícito,
         # se intenta autocargar el estado ACTUAL del evento desde la BD
@@ -97,6 +107,10 @@ def ejecutar_agente(payload):
         
         # NUEVO: Extraer bloques_a_actualizar
         bloques_a_actualizar = datos_payload.get("bloques_a_actualizar")
+        if isinstance(bloques_a_actualizar, str):
+            bloques_a_actualizar = [bloque.strip() for bloque in bloques_a_actualizar.split(",") if bloque.strip()]
+        if not bloques_a_actualizar:
+            bloques_a_actualizar = TIPO_OBJETIVO_A_BLOQUES.get(tipo_objetivo)
         
         # ----- 3. VERIFICAR MOTOR (SOLO LLM) -----
         if motor != "llm":
@@ -116,7 +130,9 @@ def ejecutar_agente(payload):
                 texto=texto,
                 api_key=api_key,
                 historial_anterior=historial_anterior,
-                bloques_a_actualizar=bloques_a_actualizar  # NUEVO
+                bloques_a_actualizar=bloques_a_actualizar,
+                tipo_objetivo=tipo_objetivo,
+                campos_objetivo=campos_objetivo
             )
         except Exception as e:
             return _construir_respuesta_error(
@@ -135,7 +151,11 @@ def ejecutar_agente(payload):
             )
 
         # ----- 7. GENERAR VALIDACIÓN Y AVISOS -----
-        resultado = generar_aviso_y_validacion(resultado)
+        resultado = generar_aviso_y_validacion(
+            resultado,
+            tipo_objetivo=tipo_objetivo,
+            campos_objetivo=campos_objetivo
+        )
 
         # ----- 8. AÑADIR METADATOS DE ACTUALIZACIÓN -----
         if historial_anterior:
