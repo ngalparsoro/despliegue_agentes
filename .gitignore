@@ -1,6 +1,7 @@
 # Python
 __pycache__/
-*.pyc
+**/__pycache__/
+*.py[cod]
 .venv/
 venv/
 
@@ -9,9 +10,26 @@ venv/
 .env.*
 !.env.example
 
-# macOS
+# Sistema/editor
 .DS_Store
+Thumbs.db
 
-# logs y salidas de ejecución
+# Logs y salidas locales
 .logs/
 nohup.out
+*.log
+
+# Artefactos generados por agentes
+Jano_transporte/salida_mercurio*/
+Vigil_busquedaconcursos/salida/
+Vigil_busquedaconcursos/salida_demo/
+Operis_autocompletado/agente_operis_llm/outputs/respuestas_json/*.json
+!Operis_autocompletado/agente_operis_llm/outputs/respuestas_json/.gitkeep
+
+# Runtime local de Hermes
+Hermes_telegram/agente_telegram_ponentes/logs/*
+!Hermes_telegram/agente_telegram_ponentes/logs/.gitkeep
+Hermes_telegram/agente_telegram_ponentes/outputs/documentos_recibidos/*
+!Hermes_telegram/agente_telegram_ponentes/outputs/documentos_recibidos/.gitkeep
+Hermes_telegram/agente_telegram_ponentes/data/uploads/tmp/*
+!Hermes_telegram/agente_telegram_ponentes/data/uploads/tmp/.gitkeep

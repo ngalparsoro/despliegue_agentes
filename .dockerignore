@@ -1,4 +1,4 @@
-# nunca dentro de la imagen: secretos y basura local
+# Nunca dentro de la imagen: secretos y basura local
 .env
 .env.*
 !.env.example
@@ -6,15 +6,23 @@
 .git.disabled
 .logs
 __pycache__
-*.pyc
+**/__pycache__
+*.py[cod]
 .DS_Store
+Thumbs.db
 nohup.out
+*.log
 
-# no hacen falta en ejecución (ojo: los PDF de data/ de Hermes SÍ hacen
-# falta — son los documentos de prueba que envía por Telegram)
+# Documentacion y pruebas no necesarias en runtime
 docs
 **/tests
 *guia_principiantes*
+
+# Salidas locales generadas por agentes
 **/salida_mercurio*
 **/salida_demo
 Vigil_busquedaconcursos/salida
+Operis_autocompletado/agente_operis_llm/outputs/respuestas_json/*.json
+Hermes_telegram/agente_telegram_ponentes/logs/*
+Hermes_telegram/agente_telegram_ponentes/outputs/documentos_recibidos/*
+Hermes_telegram/agente_telegram_ponentes/data/uploads/tmp/*
