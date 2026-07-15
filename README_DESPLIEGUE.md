@@ -1,38 +1,92 @@
-# Despliegue — Agentes de Eventos (Backstage/Mitümi)
+# Guia de despliegue - Backend DS oficial
 
-Carpeta autocontenida con lo estrictamente necesario para desplegar el sistema
-de agentes. Generada desde el repo `Agentes_Eventos` (2026-07-13): sin guías,
-tests, docs ni salidas de demo. La documentación completa vive en el repo
-(`docs/endpoints_v5.md`).
+Este repositorio es la fuente de verdad del backend DS desplegado en Render.
 
-## Puesta en marcha
+URL de produccion:
 
-1. **Python 3.10+** (probado con 3.12) y dependencias de cada servicio:
-   ```bash
-   for req in $(find . -name "requirements*.txt"); do pip install -r "$req"; done
-   ```
-2. **Credenciales**: copia `.env.example` a `.env` en esta carpeta y rellena
-   `DATABASE_URL` (rol readonly de Neon), `GROQ_API_KEY` y, si aplican,
-   `TELEGRAM_BOT_TOKEN` (Hermes) y `COMPOSIO_API_KEY` (Garum).
-   Los `.env.example` de cada agente son solo referencia: **el `.env` de la
-   raíz manda** (el script de arranque lo exporta para todos).
-3. **Arrancar todo**:
-   ```bash
-   ./arrancar_todo.sh              # + --con-hermes para el bot de Telegram
-   ./comprobar_salud.sh            # smoke test
-   ```
+```text
+https://despliegue-agentes.onrender.com
+```
+
+Documentacion principal: [README.md](README.md)
+Contrato para Front/FS: [docs/CONTRATO_FRONT_DS.md](docs/CONTRATO_FRONT_DS.md)
+
+## Puesta en marcha local
+
+1. Instalar dependencias:
+
+```bash
+for req in $(find . -name "requirements*.txt"); do pip install -r "$req"; done
+```
+
+2. Crear `.env`:
+
+```bash
+cp .env.example .env
+```
+
+3. Rellenar credenciales en `.env`:
+
+- `DATABASE_URL`
+- `GROQ_API_KEY`
+- `TELEGRAM_BOT_TOKEN` si se prueba Hermes
+- `COMPOSIO_API_KEY` si se prueba Garum
+
+4. Arrancar:
+
+```bash
+./arrancar_todo.sh
+./comprobar_salud.sh
+```
+
+Para Hermes local:
+
+```bash
+./arrancar_todo.sh --con-hermes
+```
+
+## Despliegue en Render
+
+1. Hacer commit y push a `main`.
+2. En Render, abrir el servicio `despliegue_agentes`.
+3. Pulsar `Manual Deploy` -> `Deploy latest commit`.
+4. Probar:
+
+```text
+GET https://despliegue-agentes.onrender.com/salud
+```
+
+## Variables en Render
+
+Configurar en el panel de Render, nunca en Git:
+
+- `DATABASE_URL`
+- `GROQ_API_KEY`
+- `LLM_PROVIDER=groq`
+- `COMPOSIO_API_KEY`
+- `COMPOSIO_USER_ID`
+- `TELEGRAM_BOT_TOKEN`
+- `ARRANCAR_HERMES`
+- `EVENT_ACTIVE_STATES=Planificado,Reservado,Confirmado`
 
 ## Estados de evento
 
-La base de datos actual no tiene tabla `estados` ni `eventos.id_estado`. El estado operativo vive directamente en `eventos.estado` como texto. Catalogo vigente: `Planificado`, `Reservado`, `Confirmado`, `Finalizado`, `Cancelado`.
+No existe tabla `estados` ni `eventos.id_estado`. El estado vive en `eventos.estado`.
 
-`EVENT_ACTIVE_STATES` solo controla que estados considera Hermes como eventos activos para un ponente; por defecto: `Planificado,Reservado,Confirmado`.
+Catalogo:
 
-## Mapa
+```text
+Planificado, Reservado, Confirmado, Finalizado, Cancelado
+```
+
+## Mapa de puertos internos
 
 | Puerto | Servicio |
 |---|---|
-| **5003** | **Gateway — única URL para el front** (`/agentes/...`, `/salud`, `/docs`) |
-| 5001 | Lumen (chat) · 5002 Operis (autocompletado desde texto o archivo `.txt`/`.pdf`/`.docx`) · 8000 Vigil (concursos) · 8001 Jano (transporte) |
-| 5004 | Backend de datos para agentes (Neon readonly) |
-| — | Hermes (bot Telegram, `--con-hermes`) · Garum (por ciclos: `POST :5003/agentes/garum/ciclos`) |
+| 5003 | Gateway, unica entrada HTTP publica |
+| 5001 | Lumen |
+| 5002 | Operis |
+| 5004 | Backend de datos para agentes |
+| 8000 | Vigil |
+| 8001 | Jano |
+| - | Hermes y Garum bajo demanda/proceso |
