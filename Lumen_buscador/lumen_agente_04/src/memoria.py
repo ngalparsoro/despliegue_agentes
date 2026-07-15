@@ -62,10 +62,10 @@ class MemoriaConversacion:
         Decide que id_evento usar para este turno, antes de llamar a ejecutar_agente:
         - si la pregunta lo dice explicitamente (un UUID, o "evento 12"), se usa ese, sin tocar
           memoria.
-        - si no lo dice pero parece una consulta transversal (varios eventos, conteos, por
-          estado...), se deja en None a proposito para que ejecutar_agente la trate como tal.
-        - si no, se busca por NOMBRE en la pregunta (ver nucleo.buscar_evento_por_nombre) - los
+        - si no lo dice, se busca por NOMBRE en la pregunta (ver nucleo.buscar_evento_por_nombre) - los
           id reales son UUID, asi que en la practica el usuario nombra el evento en vez de darlo.
+        - si no hay nombre de evento y parece una consulta transversal (varios eventos, conteos,
+          por estado...), se deja en None a proposito para que ejecutar_agente la trate como tal.
           Si el nombre es ambiguo (coincide con mas de un evento), no se adivina: se devuelve la
           lista de nombres en conflicto para que la capa de chat pida aclaracion.
         - si el nombre no resuelve nada, se reutiliza el ultimo evento recordado (si hay).
@@ -75,14 +75,14 @@ class MemoriaConversacion:
         if explicito is not None:
             return explicito, False, []
 
-        if _parece_consulta_transversal_eventos(pregunta.lower()):
-            return None, False, []
-
         id_por_nombre, nombres_ambiguos = buscar_evento_por_nombre(pregunta)
         if id_por_nombre is not None:
             return id_por_nombre, False, []
         if nombres_ambiguos:
             return None, False, nombres_ambiguos
+
+        if _parece_consulta_transversal_eventos(pregunta.lower()):
+            return None, False, []
 
         if self.id_evento_actual is not None:
             return self.id_evento_actual, True, []

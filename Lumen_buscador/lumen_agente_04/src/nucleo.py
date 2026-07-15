@@ -359,6 +359,9 @@ def ejecutar_agente(payload):
         if id_evento is not None and "billete" in pregunta_lower and "ida" in pregunta_lower:
             return _responder_ponentes_sin_billete(salida, id_evento, "ida")
 
+        if id_evento is not None and _parece_consulta_estado_del_evento(pregunta_lower):
+            return _responder_estado_evento(salida, id_evento)
+
         if id_evento is not None and _parece_consulta_ponentes_del_evento(pregunta_lower):
             return _responder_ponentes_evento(salida, id_evento)
 
@@ -443,6 +446,41 @@ def _pide_listado_ponentes(pregunta_lower):
         marcador in pregunta_lower
         for marcador in ("lista", "listado", "todos los ponentes", "todas las ponentes", "quienes", "quiénes", "cuales", "cuáles")
     )
+
+
+def _parece_consulta_estado_del_evento(pregunta_lower):
+    texto = _normalizar(pregunta_lower)
+    if "estado" not in texto:
+        return False
+    marcadores = (
+        "en que estado", "que estado", "estado esta", "estado est?",
+        "estado del evento", "estado de este evento", "dime el estado",
+    )
+    return any(marcador in texto for marcador in marcadores)
+
+
+def _responder_estado_evento(salida, id_evento):
+    datos = resumen_evento(id_evento)
+    if datos is None:
+        salida["resumen"] = "No encuentro el evento con id_evento " + str(id_evento) + " en los datos disponibles."
+        salida["bloqueos_detectados"] = ["id_evento " + str(id_evento) + " no existe en los datos"]
+        return auditar_salida(salida)
+
+    nombre_evento = datos.get("nombre_evento") or str(id_evento)
+    estado = datos.get("estado")
+    salida["datos_detectados"] = {
+        "id_evento": datos.get("id") or id_evento,
+        "nombre_evento": nombre_evento,
+        "estado": estado,
+    }
+    salida["trazas"]["fuentes_consultadas"] = ["eventos.nombre_evento", "eventos.estado"]
+
+    if estado:
+        salida["resumen"] = "El evento " + str(nombre_evento) + " esta en estado " + str(estado) + "."
+    else:
+        salida["resumen"] = "El evento " + str(nombre_evento) + " no tiene estado registrado."
+        salida["bloqueos_detectados"] = ["eventos.estado vacio"]
+    return auditar_salida(salida)
 
 
 def _parece_consulta_eventos_con_ponentes(pregunta_lower):
