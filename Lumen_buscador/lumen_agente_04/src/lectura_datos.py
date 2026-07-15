@@ -36,9 +36,9 @@ def _obtener_por_id(tabla, id_valor, conn=None):
     return db_backend.obtener_por_id(tabla, id_valor, conn=conn)
 
 
-def _listar(tabla):
+def _listar(tabla, filtros=None, conn=None):
     _verificar_permiso(tabla)
-    return db_backend.listar(tabla) or []
+    return db_backend.listar(tabla, filtros=filtros, conn=conn) or []
 
 
 def evento_existe(id_evento):
@@ -56,34 +56,44 @@ def _ponente_por_id(id_ponente, conn=None):
     return _obtener_por_id("ponentes", id_ponente, conn=conn)
 
 
-def _ponencia_del_evento(evento, conn=None):
+def _ponencias_del_evento(id_evento, conn=None):
     """
-    Devuelve la ponencia enlazada al evento (via eventos.id_ponencia), o None si el evento no
-    tiene ninguna ponencia asociada. Un evento enlaza como mucho con una unica ponencia (y por
-    tanto un unico ponente) - ver data/rag/documentos/esquema_bd.md.
+    Devuelve todas las ponencias enlazadas a un evento segun el esquema real:
+    ponencias.id_evento -> eventos.id. Un evento puede tener varias ponencias y, por tanto,
+    varios ponentes.
     """
-    id_ponencia = evento.get("id_ponencia")
-    if id_ponencia is None:
-        return None
-    return _obtener_por_id("ponencias", id_ponencia, conn=conn)
+    if id_evento is None:
+        return []
+    ponencias = _listar("ponencias", filtros={"id_evento": id_evento}, conn=conn)
+    return sorted(ponencias, key=lambda p: str(p.get("horario_ponencia") or ""))
+
+
+def _combinar_ponente_y_ponencia(ponencia, conn=None):
+    ponente = _ponente_por_id(ponencia.get("id_ponente"), conn=conn)
+    combinado = dict(ponente or {})
+    combinado.update(ponencia)
+    combinado["id_ponencia"] = ponencia.get("id")
+    combinado["id_ponente"] = ponencia.get("id_ponente")
+    return combinado
 
 
 def ponentes_sin_billete_vuelta(id_evento):
     """
-    Devuelve la lista de ponentes (dicts) del evento dado cuyo billete_vuelta_link
-    esta vacio. Devuelve None si el evento no existe. Con el esquema actual la lista
-    contendra como mucho un elemento (un evento enlaza con una unica ponencia/ponente).
+    Devuelve la lista de ponentes del evento cuyo billete_vuelta_link esta vacio.
+    Devuelve None si el evento no existe. El esquema real permite varias ponencias por evento.
     """
     evento = resumen_evento(id_evento)
     if evento is None:
         return None
 
-    ponencia = _ponencia_del_evento(evento)
-    if ponencia is None or ponencia.get("billete_vuelta_link"):
-        return []
-
-    ponente = _ponente_por_id(ponencia.get("id_ponente"))
-    return [ponente] if ponente else []
+    resultado = []
+    for ponencia in _ponencias_del_evento(id_evento):
+        if ponencia.get("billete_vuelta_link"):
+            continue
+        combinado = _combinar_ponente_y_ponencia(ponencia)
+        if combinado.get("nombre_ponente"):
+            resultado.append(combinado)
+    return resultado
 
 
 def ponentes_sin_billete_ida(id_evento):
@@ -92,13 +102,14 @@ def ponentes_sin_billete_ida(id_evento):
     if evento is None:
         return None
 
-    ponencia = _ponencia_del_evento(evento)
-    if ponencia is None or ponencia.get("billete_ida_link"):
-        return []
-
-    ponente = _ponente_por_id(ponencia.get("id_ponente"))
-    return [ponente] if ponente else []
-
+    resultado = []
+    for ponencia in _ponencias_del_evento(id_evento):
+        if ponencia.get("billete_ida_link"):
+            continue
+        combinado = _combinar_ponente_y_ponencia(ponencia)
+        if combinado.get("nombre_ponente"):
+            resultado.append(combinado)
+    return resultado
 
 
 def ponentes_registrados():
@@ -116,6 +127,44 @@ def ponentes_registrados():
         if resumen:
             resultado.append(resumen)
     return resultado
+
+
+def eventos_con_ponentes():
+    """Devuelve eventos que tienen al menos una ponencia con ponente asociado."""
+    with db_backend.abrir_conexion() as conn:
+        eventos = _listar("eventos", conn=conn)
+        ponencias = _listar("ponencias", conn=conn)
+        ponentes = _listar("ponentes", conn=conn)
+
+    ponentes_por_id = {ponente.get("id"): ponente for ponente in ponentes}
+    ponencias_por_evento = {}
+    for ponencia in ponencias:
+        id_evento = ponencia.get("id_evento")
+        ponente = ponentes_por_id.get(ponencia.get("id_ponente"))
+        if not id_evento or not ponente:
+            continue
+        combinado = dict(ponente)
+        combinado.update(ponencia)
+        combinado["id_ponencia"] = ponencia.get("id")
+        combinado["id_ponente"] = ponencia.get("id_ponente")
+        ponencias_por_evento.setdefault(id_evento, []).append(combinado)
+
+    resultado = []
+    for evento in eventos:
+        lista = sorted(
+            ponencias_por_evento.get(evento.get("id"), []),
+            key=lambda p: str(p.get("horario_ponencia") or ""),
+        )
+        if lista:
+            resultado.append({
+                "id_evento": evento.get("id"),
+                "nombre_evento": evento.get("nombre_evento"),
+                "total_ponentes": len(lista),
+                "ponentes": lista,
+            })
+    return resultado
+
+
 ESTADOS_EVENTO_CANONICOS = ("Planificado", "Reservado", "Confirmado", "Finalizado", "Cancelado")
 
 
@@ -181,14 +230,11 @@ def contexto_completo_evento(id_evento):
 
         cliente_encontrado = _obtener_por_id("clientes", evento.get("id_cliente"), conn=conn)
 
-        ponencia_encontrada = _ponencia_del_evento(evento, conn=conn)
-        ponentes_del_evento = []
-        if ponencia_encontrada is not None:
-            ponente = _ponente_por_id(ponencia_encontrada.get("id_ponente"), conn=conn)
-            if ponente:
-                combinado = dict(ponente)
-                combinado.update(ponencia_encontrada)
-                ponentes_del_evento.append(combinado)
+        ponencias_encontradas = _ponencias_del_evento(evento.get("id"), conn=conn)
+        ponentes_del_evento = [
+            _combinar_ponente_y_ponencia(ponencia, conn=conn)
+            for ponencia in ponencias_encontradas
+        ]
 
         return {
             "evento": evento,
@@ -196,5 +242,6 @@ def contexto_completo_evento(id_evento):
             "sala": sala_encontrada,
             "espacio": espacio_encontrado,
             "cliente": cliente_encontrado,
+            "ponencias": ponencias_encontradas,
             "ponentes": ponentes_del_evento,
         }

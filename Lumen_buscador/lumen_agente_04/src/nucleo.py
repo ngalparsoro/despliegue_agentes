@@ -18,6 +18,7 @@ preguntas formuladas de una forma que las palabras clave no cubren. Ver
 _responder_con_clasificador_respaldo() y README.md para el detalle y las garantias de seguridad.
 """
 
+import datetime
 import json
 import re
 import unicodedata
@@ -31,6 +32,7 @@ from src.lectura_datos import (
     ponentes_sin_billete_vuelta,
     ponentes_sin_billete_ida,
     ponentes_registrados,
+    eventos_con_ponentes,
     contexto_completo_evento,
     estados_disponibles,
     eventos_por_estado,
@@ -40,6 +42,11 @@ from src.validaciones import auditar_salida
 from src.prompts import cargar_prompt
 from src.llm import llamar_llm, llm_disponible
 from integrations.db_backend import DbBackendError
+
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:  # Python < 3.9, por compatibilidad local
+    ZoneInfo = None
 
 # Defensa en profundidad: si alguna vez esto no fuera False, preferimos que el agente no arranque
 # a que escriba en la BD por error.
@@ -332,6 +339,9 @@ def ejecutar_agente(payload):
     # la transversal, que tambien lee eventos de la BD) - de ahi que todas vivan dentro del
     # mismo try.
     try:
+        if id_evento is None and _parece_consulta_eventos_con_ponentes(pregunta_lower):
+            return _responder_eventos_con_ponentes(salida)
+
         if id_evento is None and _parece_consulta_global_ponentes(pregunta_lower):
             return _responder_consulta_global_ponentes(salida, pregunta_lower)
 
@@ -348,6 +358,9 @@ def ejecutar_agente(payload):
 
         if id_evento is not None and "billete" in pregunta_lower and "ida" in pregunta_lower:
             return _responder_ponentes_sin_billete(salida, id_evento, "ida")
+
+        if id_evento is not None and _parece_consulta_ponentes_del_evento(pregunta_lower):
+            return _responder_ponentes_evento(salida, id_evento)
 
         if id_evento is not None:
             # Preguntas libres sobre un evento (presupuesto, sala, espacio, cliente...): si hay
@@ -432,6 +445,92 @@ def _pide_listado_ponentes(pregunta_lower):
     )
 
 
+def _parece_consulta_eventos_con_ponentes(pregunta_lower):
+    texto = _normalizar(pregunta_lower)
+    marcadores = (
+        "eventos con ponente", "eventos con ponentes", "eventos con ponencia",
+        "eventos con ponencias", "eventos que tienen ponente", "eventos que tienen ponentes",
+        "eventos que tienen ponencia", "eventos que tienen ponencias", "eventos asociados a ponentes",
+    )
+    return any(marcador in texto for marcador in marcadores)
+
+
+def _parece_consulta_ponentes_del_evento(pregunta_lower):
+    texto = _normalizar(pregunta_lower)
+    if "billete" in texto:
+        return False
+    marcadores = (
+        "ponente", "ponentes", "ponencia", "ponencias", "speaker", "speakers",
+        "presentacion", "presentaciones",
+    )
+    return any(marcador in texto for marcador in marcadores)
+
+
+def _describir_ponente_ponencia(item):
+    nombre = item.get("nombre_ponente") or "Ponente sin nombre"
+    tipo = item.get("tipo_ponencia") or "ponencia sin tipo"
+    horario = item.get("horario_ponencia") or "horario sin registrar"
+    return nombre + " (" + tipo + ", " + str(horario) + ")"
+
+
+def _responder_eventos_con_ponentes(salida):
+    eventos = eventos_con_ponentes()
+    salida["trazas"]["fuentes_consultadas"] = [
+        "eventos.id", "eventos.nombre_evento", "ponencias.id_evento", "ponencias.id_ponente", "ponentes.nombre_ponente",
+    ]
+
+    if not eventos:
+        salida["resumen"] = "No hay eventos con ponentes asociados en los datos disponibles."
+        salida["datos_detectados"] = {"eventos": []}
+        return auditar_salida(salida)
+
+    eventos_respuesta = _normalizar_fechas_respuesta(eventos)
+    partes = []
+    for evento in eventos_respuesta:
+        nombres = [p.get("nombre_ponente") for p in evento.get("ponentes", []) if p.get("nombre_ponente")]
+        partes.append(
+            str(evento.get("nombre_evento")) + " (" + str(evento.get("total_ponentes", len(nombres))) + ": " + ", ".join(nombres) + ")"
+        )
+
+    salida["resumen"] = "Hay " + str(len(eventos_respuesta)) + " evento(s) con ponentes asociados: " + "; ".join(partes) + "."
+    salida["datos_detectados"] = {"eventos": eventos_respuesta}
+    return auditar_salida(salida)
+
+
+def _responder_ponentes_evento(salida, id_evento):
+    contexto = contexto_completo_evento(id_evento)
+    if contexto is None:
+        salida["resumen"] = "No encuentro el evento con id_evento " + str(id_evento) + " en los datos disponibles."
+        salida["bloqueos_detectados"] = ["id_evento " + str(id_evento) + " no existe en los datos"]
+        return auditar_salida(salida)
+
+    contexto_respuesta = _normalizar_fechas_respuesta(contexto)
+    evento = contexto_respuesta.get("evento") or {}
+    ponentes = contexto_respuesta.get("ponentes") or []
+    nombre_evento = evento.get("nombre_evento") or str(id_evento)
+
+    salida["trazas"]["fuentes_consultadas"] = [
+        "eventos.nombre_evento", "ponencias.id_evento", "ponencias.tipo_ponencia",
+        "ponencias.horario_ponencia", "ponentes.nombre_ponente",
+    ]
+    salida["datos_detectados"] = {
+        "evento": evento,
+        "total_ponentes": len(ponentes),
+        "ponentes": ponentes,
+    }
+
+    if not ponentes:
+        salida["resumen"] = "El evento " + str(nombre_evento) + " no tiene ponencias ni ponentes asociados."
+        return auditar_salida(salida)
+
+    detalles = [_describir_ponente_ponencia(item) for item in ponentes]
+    salida["resumen"] = (
+        "Si. " + str(nombre_evento) + " tiene " + str(len(ponentes)) +
+        " ponencia(s) con ponente asociado: " + "; ".join(detalles) + "."
+    )
+    return auditar_salida(salida)
+
+
 def _responder_consulta_global_ponentes(salida, pregunta_lower):
     ponentes = ponentes_registrados()
     total = len(ponentes)
@@ -496,6 +595,64 @@ def _responder_ponentes_sin_billete(salida, id_evento, tipo):
     return auditar_salida(salida)
 
 
+PATRON_FECHA_ISO = re.compile(
+    r"\b\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})?)?\b"
+)
+ZONA_HORARIA_RESPUESTA = "Europe/Madrid"
+
+
+def _a_hora_respuesta(fecha_hora):
+    if fecha_hora.tzinfo is None or ZoneInfo is None:
+        return fecha_hora
+    try:
+        return fecha_hora.astimezone(ZoneInfo(ZONA_HORARIA_RESPUESTA))
+    except Exception:
+        return fecha_hora
+
+
+def _formatear_fecha_lumen(valor):
+    """Devuelve fechas legibles para Lumen: dd-mm-aaaa o dd-mm-aaaa HH:MM h."""
+    if isinstance(valor, datetime.datetime):
+        fecha_hora = _a_hora_respuesta(valor)
+        return fecha_hora.strftime("%d-%m-%Y %H:%M h")
+
+    if isinstance(valor, datetime.date):
+        return valor.strftime("%d-%m-%Y")
+
+    if not isinstance(valor, str):
+        return valor
+
+    texto = valor.strip()
+    if not PATRON_FECHA_ISO.fullmatch(texto):
+        return valor
+
+    try:
+        if "T" in texto or re.search(r"\d{2}:\d{2}", texto):
+            normalizado = texto.replace("Z", "+00:00")
+            fecha_hora = datetime.datetime.fromisoformat(normalizado)
+            return _formatear_fecha_lumen(fecha_hora)
+        return datetime.date.fromisoformat(texto).strftime("%d-%m-%Y")
+    except ValueError:
+        return valor
+
+
+def _normalizar_fechas_respuesta(valor):
+    if isinstance(valor, dict):
+        return {clave: _normalizar_fechas_respuesta(v) for clave, v in valor.items()}
+    if isinstance(valor, list):
+        return [_normalizar_fechas_respuesta(item) for item in valor]
+    return _formatear_fecha_lumen(valor)
+
+
+def _formatear_fechas_en_texto(texto):
+    if not isinstance(texto, str):
+        return texto
+
+    def reemplazar(match):
+        return str(_formatear_fecha_lumen(match.group(0)))
+
+    return PATRON_FECHA_ISO.sub(reemplazar, texto)
+
 def _parsear_json_llm(texto):
     """
     El LLM deberia devolver SOLO JSON, pero a veces lo envuelve en ```json ... ``` o le añade
@@ -557,7 +714,7 @@ def _responder_con_llm(salida, pregunta, id_evento, historial=None):
             prompt_generar
             .replace("{{consulta_usuario}}", pregunta)
             .replace("{{categoria_de_prompt_clasificar_consulta}}", "consulta_datos_evento")
-            .replace("{{resultado_consulta_bd_o_rag}}", json.dumps(contexto, ensure_ascii=False))
+            .replace("{{resultado_consulta_bd_o_rag}}", json.dumps(_normalizar_fechas_respuesta(contexto), ensure_ascii=False))
             .replace("{{turnos_previos_de_esta_sesion_de_chat_opcional}}", historial_texto)
         )
         texto = llamar_llm(prompt_sistema, mensaje)
@@ -566,8 +723,8 @@ def _responder_con_llm(salida, pregunta, id_evento, historial=None):
         salida.setdefault("errores", []).append("Fallo de LLM, se usa fallback determinista: " + str(exc))
         return None
 
-    salida["resumen"] = datos_llm.get("resumen", "")
-    salida["datos_detectados"] = datos_llm.get("datos_detectados", {})
+    salida["resumen"] = _formatear_fechas_en_texto(datos_llm.get("resumen", ""))
+    salida["datos_detectados"] = _normalizar_fechas_respuesta(datos_llm.get("datos_detectados", {}))
     salida["bloqueos_detectados"] = datos_llm.get("bloqueos_detectados", [])
     if datos_llm.get("requiere_aclaracion"):
         salida["bloqueos_detectados"].append(
@@ -752,10 +909,12 @@ def _responder_resumen_evento(salida, id_evento):
         salida["bloqueos_detectados"] = ["id_evento " + str(id_evento) + " no existe en los datos"]
         return auditar_salida(salida)
 
+    datos_respuesta = _normalizar_fechas_respuesta(datos)
     salida["resumen"] = (
-        "Evento " + str(id_evento) + " - " + datos["nombre_evento"] + " (" + datos["ciudad"] + "), " +
-        "del " + datos["fecha_inicio"] + " al " + datos["fecha_fin"] + "."
+        "Evento " + str(id_evento) + " - " + datos_respuesta["nombre_evento"] + " (" + datos_respuesta["ciudad"] + "), " +
+        "del " + str(datos_respuesta.get("fecha_inicio", "sin fecha de inicio")) +
+        " al " + str(datos_respuesta.get("fecha_fin", "sin fecha de fin")) + "."
     )
-    salida["datos_detectados"] = datos
+    salida["datos_detectados"] = datos_respuesta
     salida["trazas"]["fuentes_consultadas"] = ["eventos.*"]
     return auditar_salida(salida)
