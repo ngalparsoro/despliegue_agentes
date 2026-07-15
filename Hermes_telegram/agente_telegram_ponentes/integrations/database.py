@@ -1,6 +1,7 @@
 """Adaptador PostgreSQL/Neon para el agente Telegram Ponentes.
 
-Los datos operativos se leen exclusivamente de PostgreSQL/Neon. La relación
+Los datos operativos se leen exclusivamente de PostgreSQL/Neon. El esquema
+actual guarda el estado directamente en ``eventos.estado``. La relación
 Telegram -> id_ponente se mantiene temporalmente en
 ``data/estado/mapeo_telegram_ponentes.json`` porque el esquema actual no tiene
 una tabla específica para dicha vinculación.
@@ -254,7 +255,7 @@ def obtener_eventos_activos_ponente_db(id_ponente: str) -> list[dict]:
                     e.fecha_inicio,
                     e.fecha_fin,
                     e.tipo_evento,
-                    e.estado AS estado_evento,
+                    e.estado::text AS estado_evento,
                     p.id AS id_ponencia,
                     p.ponente_estado,
                     p.tipo_ponencia,
@@ -262,7 +263,7 @@ def obtener_eventos_activos_ponente_db(id_ponente: str) -> list[dict]:
                 FROM public.ponencias p
                 JOIN public.eventos e ON e.id = p.id_evento
                 WHERE p.id_ponente = %s
-                  AND LOWER(TRIM(COALESCE(e.estado, ''))) = ANY(%s)
+                  AND LOWER(TRIM(COALESCE(e.estado::text, ''))) = ANY(%s)
                 ORDER BY e.fecha_inicio ASC;
                 """,
                 (id_ponente, estados_activos),
@@ -274,6 +275,8 @@ def obtener_eventos_activos_ponente_db(id_ponente: str) -> list[dict]:
             "id_evento": _normalizar_id(row["id_evento"]),
             "id_ponente": _normalizar_id(id_ponente),
             "id_ponencia": _normalizar_id(row["id_ponencia"]),
+            # El esquema actual guarda el estado directamente en eventos.estado.
+            "id_estado": None,
             "nombre_evento": row.get("nombre_evento"),
             "ciudad": row.get("ciudad"),
             "lugar_confirmado": row.get("lugar_confirmado"),
