@@ -100,6 +100,22 @@ def ponentes_sin_billete_ida(id_evento):
     return [ponente] if ponente else []
 
 
+
+def ponentes_registrados():
+    """
+    Devuelve un listado seguro de ponentes registrados para consultas globales.
+
+    Se excluyen campos personales sensibles como documento, email, telefono, foto o CV.
+    Lumen puede dar conteos y listados basicos sin pedir id_evento, pero no exporta datos
+    personales masivos desde una pregunta global.
+    """
+    campos_seguros = ("id", "nombre_ponente", "empresa", "cargo", "sector")
+    resultado = []
+    for ponente in _listar("ponentes"):
+        resumen = {campo: ponente.get(campo) for campo in campos_seguros if ponente.get(campo)}
+        if resumen:
+            resultado.append(resumen)
+    return resultado
 ESTADOS_EVENTO_CANONICOS = ("Planificado", "Reservado", "Confirmado", "Finalizado", "Cancelado")
 
 

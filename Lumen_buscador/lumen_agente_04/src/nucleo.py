@@ -30,6 +30,7 @@ from src.lectura_datos import (
     resumen_evento,
     ponentes_sin_billete_vuelta,
     ponentes_sin_billete_ida,
+    ponentes_registrados,
     contexto_completo_evento,
     estados_disponibles,
     eventos_por_estado,
@@ -325,18 +326,22 @@ def ejecutar_agente(payload):
         salida["requiere_validacion_humana"] = True
         return auditar_salida(salida)
 
-    if id_evento is None and ("billete" in pregunta_lower or "ponente" in pregunta_lower):
-        salida["resumen"] = "De que evento (id_evento) necesitas consultar esa informacion?"
-        salida["bloqueos_detectados"] = ["falta id_evento para resolver la consulta"]
-        return auditar_salida(salida)
 
     # --- 2. Consulta de solo lectura (BD real, integrations/db_backend.py) -------------------
     # TablaNoPermitida y DbBackendError pueden saltar en cualquiera de estas ramas (incluida
     # la transversal, que tambien lee eventos de la BD) - de ahi que todas vivan dentro del
     # mismo try.
     try:
+        if id_evento is None and _parece_consulta_global_ponentes(pregunta_lower):
+            return _responder_consulta_global_ponentes(salida, pregunta_lower)
+
         if id_evento is None and _parece_consulta_transversal_eventos(pregunta_lower):
             return _responder_consulta_transversal_eventos(salida, pregunta_lower)
+
+        if id_evento is None and ("billete" in pregunta_lower or "ponente" in pregunta_lower):
+            salida["resumen"] = "De que evento (id_evento) necesitas consultar esa informacion?"
+            salida["bloqueos_detectados"] = ["falta id_evento para resolver la consulta"]
+            return auditar_salida(salida)
 
         if id_evento is not None and "billete" in pregunta_lower and "vuelta" in pregunta_lower:
             return _responder_ponentes_sin_billete(salida, id_evento, "vuelta")
@@ -398,6 +403,55 @@ def ejecutar_agente(payload):
     salida["bloqueos_detectados"] = ["pregunta fuera del alcance de datos de Mitumi"]
     return auditar_salida(salida)
 
+
+def _parece_consulta_global_ponentes(pregunta_lower):
+    """Detecta consultas globales sobre la tabla ponentes que no requieren id_evento."""
+    if "ponente" not in pregunta_lower:
+        return False
+
+    marcadores_globales = [
+        "bbdd", "base de datos", "registrado", "registrados", "registrada", "registradas",
+        "total", "totales", "cuantos", "cuántos", "numero", "número", "lista", "listado",
+        "todos los ponentes", "todas las ponentes", "ponentes disponibles",
+    ]
+    if not any(marcador in pregunta_lower for marcador in marcadores_globales):
+        return False
+
+    marcadores_evento_concreto = [
+        "id_evento", "este evento", "ese evento", "del evento", "para el evento",
+        "billete", "presentacion", "presentación", "hotel", "transporte",
+        "congreso", "jornada", "gala", "feria", "seminario", "taller", "premios",
+    ]
+    return not any(marcador in pregunta_lower for marcador in marcadores_evento_concreto)
+
+
+def _pide_listado_ponentes(pregunta_lower):
+    return any(
+        marcador in pregunta_lower
+        for marcador in ("lista", "listado", "todos los ponentes", "todas las ponentes", "quienes", "quiénes", "cuales", "cuáles")
+    )
+
+
+def _responder_consulta_global_ponentes(salida, pregunta_lower):
+    ponentes = ponentes_registrados()
+    total = len(ponentes)
+    salida["datos_detectados"] = {"total_ponentes": total}
+    salida["trazas"]["fuentes_consultadas"] = ["ponentes"]
+
+    if _pide_listado_ponentes(pregunta_lower):
+        nombres = [p.get("nombre_ponente") for p in ponentes if p.get("nombre_ponente")]
+        salida["datos_detectados"]["ponentes"] = ponentes
+        salida["trazas"]["fuentes_consultadas"] = [
+            "ponentes.nombre_ponente", "ponentes.empresa", "ponentes.cargo", "ponentes.sector"
+        ]
+        if nombres:
+            salida["resumen"] = "Hay " + str(total) + " ponente(s) registrados: " + ", ".join(nombres) + "."
+        else:
+            salida["resumen"] = "No hay ponentes registrados en la base de datos."
+        return auditar_salida(salida)
+
+    salida["resumen"] = "Hay " + str(total) + " ponente(s) registrados en la base de datos."
+    return auditar_salida(salida)
 
 def _contiene_alguna(texto, palabras):
     """
