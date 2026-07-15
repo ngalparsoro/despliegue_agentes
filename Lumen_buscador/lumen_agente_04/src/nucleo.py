@@ -54,7 +54,7 @@ PALABRAS_ESCRITURA = [
 PALABRAS_USUARIOS = ["usuarios", "contraseña", "password", "credencial", "credenciales"]
 
 # --- Consultas transversales por estado de evento (sin id_evento) --------------------------
-# Catalogo real de `public.estados` actualizado el 14/07/2026:
+# Catalogo real de `public.eventos.estado` actualizado el 15/07/2026:
 # 0. Planificado -> evento creado en la app; lo activa el boton "crear evento".
 # 1. Reservado   -> sala/espacio seleccionado o reservado; lo activa "Reservar lugar".
 # 2. Confirmado  -> cliente acepta lugar y presupuesto; requiere "confirmar lugar" +
@@ -62,8 +62,8 @@ PALABRAS_USUARIOS = ["usuarios", "contraseña", "password", "credencial", "crede
 # 3. Finalizado  -> evento ya celebrado; no tiene boton, se activa el dia posterior al evento.
 # 4. Cancelado   -> evento no se realiza; lo activa "Cancelar evento" con doble validacion.
 #
-# Las claves de SINONIMOS_ESTADO_EVENTO deben coincidir EXACTAMENTE con estados.descripcion,
-# porque lectura_datos.eventos_por_estado compara por igualdad contra la BD. Los nombres antiguos
+# Las claves de SINONIMOS_ESTADO_EVENTO deben coincidir EXACTAMENTE con eventos.estado,
+# porque lectura_datos.eventos_por_estado compara por igualdad contra eventos.estado. Los nombres antiguos
 # se conservan solo como sinonimos para que Lumen entienda preguntas formuladas con el catalogo
 # previo o con etiquetas del prototipo. El dict prioriza "Reservado" antes que "Planificado" para
 # que "pre-reservado" no se confunda con "pre-evento" por la tolerancia a errores tipograficos.
@@ -649,7 +649,7 @@ def _responder_consulta_transversal_eventos(salida, pregunta_lower):
         else:
             salida["resumen"] = "No he podido leer ningun estado en los datos disponibles."
         salida["datos_detectados"] = {"estados_disponibles": disponibles}
-        salida["trazas"]["fuentes_consultadas"] = ["estados.descripcion"]
+        salida["trazas"]["fuentes_consultadas"] = ["eventos.estado"]
         return auditar_salida(salida)
 
     estado_canonico, coincide = _detectar_estado_pedido(pregunta_lower)
@@ -657,7 +657,7 @@ def _responder_consulta_transversal_eventos(salida, pregunta_lower):
     if coincide:
         eventos = eventos_por_estado(estado_canonico) or []
         etiqueta = "en estado '" + estado_canonico + "'"
-        fuentes = ["eventos.id_estado", "estados.descripcion"]
+        fuentes = ["eventos.estado"]
     else:
         # La pregunta menciona un estado, pero no coincide con ninguno real: no adivinar.
         # Se compara normalizado y con tolerancia a typos, igual que en _detectar_estado_pedido -

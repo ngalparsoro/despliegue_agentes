@@ -6,7 +6,7 @@ Si una consulta requiere un dato que no aparece en este esquema, Lumen debe decl
 
 > Nota de versión: en este esquema la clave primaria de cada tabla es siempre el campo genérico `id`
 > (no `id_cliente`, `id_evento`, etc.). Las claves foráneas conservan el nombre descriptivo
-> (`id_cliente`, `id_estado`, `id_sala`, `id_presupuesto`, `id_ponencia`, `id_espacio`, `id_ponente`)
+> (`id_cliente`, `id_sala`, `id_presupuesto`, `id_ponencia`, `id_espacio`, `id_ponente`)
 > y viven todas del lado de la tabla que referencia a la otra — `eventos` es la tabla central del
 > modelo y concentra la mayoría de las FK.
 
@@ -16,7 +16,7 @@ Si una consulta requiere un dato que no aparece en este esquema, Lumen debe decl
 `id`, `cliente`, `email`, `telefono`, `empresa`, `sector`, `ciudad`
 
 ### `eventos`
-`id`, `nombre_evento`, `ciudad`, `lugar_confirmado`, `fecha_inicio`, `fecha_fin`, `numero_personas`, `tipo_evento`, `nota`, `id_presupuesto` (FK → `presupuestos`), `id_cliente` (FK → `clientes`), `id_estado` (FK → `estados`), `id_sala` (FK → `salas`), `id_ponencia` (FK → `ponencias`)
+`id`, `nombre_evento`, `ciudad`, `lugar_confirmado`, `fecha_inicio`, `fecha_fin`, `numero_personas`, `tipo_evento`, `nota`, `estado` (texto: Planificado/Reservado/Confirmado/Finalizado/Cancelado), `id_presupuesto` (FK → `presupuestos`), `id_cliente` (FK → `clientes`), `id_sala` (FK → `salas`), `id_ponencia` (FK → `ponencias`)
 
 ### `presupuestos`
 `id`, `estado_presupuesto`, `total`, `fecha`, `nota_ubicacion`, `precio_ubicacion`, `catering`, `nota_catering`, `precio_catering`, `audiovisuales`, `nota_audiovisuales`, `precio_audiovisuales`, `otros`, `nota_otros`, `precio_otros`, `observaciones`
@@ -41,14 +41,11 @@ que exista realmente — cero o un ponente — sin asumir que puede haber varios
 ### `ponentes`
 `id`, `nombre_ponente`, `docu_identificacion`, `email`, `sector`, `telefono`, `foto_link`, `cv_link`, `empresa`, `cargo`
 
-### `estados`
-`id`, `descripcion`
-
 ## Relaciones principales
 
 ```text
 clientes  1──N eventos          (eventos.id_cliente → clientes.id)
-estados   1──N eventos          (eventos.id_estado → estados.id)
+eventos.estado contiene directamente el estado operativo del evento.
 salas     1──N eventos          (eventos.id_sala → salas.id)
 salas     N──1 espacios         (salas.id_espacio → espacios.id)
 eventos   N──1 presupuestos     (eventos.id_presupuesto → presupuestos.id)

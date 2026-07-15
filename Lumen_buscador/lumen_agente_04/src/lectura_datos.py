@@ -100,48 +100,43 @@ def ponentes_sin_billete_ida(id_evento):
     return [ponente] if ponente else []
 
 
+ESTADOS_EVENTO_CANONICOS = ("Planificado", "Reservado", "Confirmado", "Finalizado", "Cancelado")
+
+
+def _estado_evento(evento):
+    return str(evento.get("estado") or "").strip()
+
+
 def estados_disponibles():
-    """Lista de descripciones de estado."""
-    return [e["descripcion"] for e in _listar("estados")]
+    """Lista de estados disponibles desde eventos.estado (Prisma elimino public.estados)."""
+    vistos = {_estado_evento(ev) for ev in _listar("eventos") if _estado_evento(ev)}
+    extras = sorted(estado for estado in vistos if estado not in ESTADOS_EVENTO_CANONICOS)
+    return list(ESTADOS_EVENTO_CANONICOS) + extras
 
 
 def eventos_por_estado(descripcion_estado):
     """
-    Devuelve los eventos (enriquecidos con su descripcion de estado en texto) cuyo id_estado
-    corresponde a `descripcion_estado`. Devuelve None si `descripcion_estado` no coincide con
-    ningun estado real, para que el llamador muestre estados_disponibles() en vez de devolver
-    una lista vacia enganosa.
+    Devuelve eventos cuyo campo textual eventos.estado coincide con `descripcion_estado`.
+    El catalogo vive ahora en la propia tabla eventos, no en una tabla de traduccion.
     """
-    estados_por_id = {}
-    id_estado_buscado = None
-    for e in _listar("estados"):
-        estados_por_id[e["id"]] = e["descripcion"]
-        if e["descripcion"] == descripcion_estado:
-            id_estado_buscado = e["id"]
-
-    if id_estado_buscado is None:
-        return None
-
+    buscado = str(descripcion_estado or "").strip().lower()
     resultado = []
     for ev in _listar("eventos"):
-        if ev.get("id_estado") == id_estado_buscado:
+        if _estado_evento(ev).lower() == buscado:
             enriquecido = dict(ev)
-            enriquecido["estado"] = estados_por_id.get(ev.get("id_estado"))
+            enriquecido["estado"] = _estado_evento(ev)
             resultado.append(enriquecido)
     return resultado
 
 
 def todos_los_eventos():
     """
-    Devuelve todos los eventos, cada uno con su 'estado' ya resuelto a texto. Se usa para
-    consultas transversales generales ("cuantos eventos hay", "listame los eventos") que no
-    filtran por un estado concreto.
+    Devuelve todos los eventos usando directamente el campo textual eventos.estado.
     """
-    estados_por_id = {e["id"]: e["descripcion"] for e in _listar("estados")}
     resultado = []
     for ev in _listar("eventos"):
         enriquecido = dict(ev)
-        enriquecido["estado"] = estados_por_id.get(ev.get("id_estado"))
+        enriquecido["estado"] = _estado_evento(ev)
         resultado.append(enriquecido)
     return resultado
 

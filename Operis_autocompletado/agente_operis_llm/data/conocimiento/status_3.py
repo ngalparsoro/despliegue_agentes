@@ -1,7 +1,7 @@
 # knowledge/status_3.py
 
-# Estados del evento (tabla `public.estados`). Catalogo real actualizado el
-# 14/07/2026 tras simplificar el flujo operativo a 5 estados.
+# Estados del evento (columna `public.eventos.estado`). Catalogo real actualizado el
+# 15/07/2026 tras mover el estado al campo textual `eventos.estado`.
 # Planificado -> crear evento; Reservado -> reservar lugar; Confirmado ->
 # confirmar lugar + confirmar presupuesto; Finalizado -> dia posterior al
 # evento; Cancelado -> cancelar evento con doble validacion.

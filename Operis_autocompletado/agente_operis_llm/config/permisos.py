@@ -33,7 +33,6 @@ TABLAS_PERMITIDAS = {
     "presupuestos",
     "ponentes",
     "ponencias",
-    "estados",
     "salas",
     "espacios",
 }

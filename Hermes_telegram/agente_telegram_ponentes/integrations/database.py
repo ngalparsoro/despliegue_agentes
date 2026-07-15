@@ -254,17 +254,15 @@ def obtener_eventos_activos_ponente_db(id_ponente: str) -> list[dict]:
                     e.fecha_inicio,
                     e.fecha_fin,
                     e.tipo_evento,
-                    e.id_estado,
-                    est.descripcion AS estado_evento,
+                    e.estado AS estado_evento,
                     p.id AS id_ponencia,
                     p.ponente_estado,
                     p.tipo_ponencia,
                     p.horario_ponencia
                 FROM public.ponencias p
                 JOIN public.eventos e ON e.id = p.id_evento
-                JOIN public.estados est ON est.id = e.id_estado
                 WHERE p.id_ponente = %s
-                  AND LOWER(TRIM(COALESCE(est.descripcion, ''))) = ANY(%s)
+                  AND LOWER(TRIM(COALESCE(e.estado, ''))) = ANY(%s)
                 ORDER BY e.fecha_inicio ASC;
                 """,
                 (id_ponente, estados_activos),
@@ -276,7 +274,6 @@ def obtener_eventos_activos_ponente_db(id_ponente: str) -> list[dict]:
             "id_evento": _normalizar_id(row["id_evento"]),
             "id_ponente": _normalizar_id(id_ponente),
             "id_ponencia": _normalizar_id(row["id_ponencia"]),
-            "id_estado": _normalizar_id(row.get("id_estado")),
             "nombre_evento": row.get("nombre_evento"),
             "ciudad": row.get("ciudad"),
             "lugar_confirmado": row.get("lugar_confirmado"),

@@ -32,7 +32,7 @@ ESQUEMA_ESPERADO = {
     "clientes": {"id", "cliente", "email", "telefono", "empresa", "sector", "ciudad"},
     "eventos": {
         "id", "nombre_evento", "ciudad", "lugar_confirmado", "fecha_inicio", "fecha_fin",
-        "numero_personas", "tipo_evento", "nota", "id_presupuesto", "id_cliente", "id_estado",
+        "numero_personas", "tipo_evento", "nota", "estado", "id_presupuesto", "id_cliente",
         "id_sala", "id_ponencia",
     },
     "presupuestos": {
@@ -55,7 +55,6 @@ ESQUEMA_ESPERADO = {
         "id", "nombre_ponente", "docu_identificacion", "email", "sector", "telefono",
         "foto_link", "cv_link", "empresa", "cargo",
     },
-    "estados": {"id", "descripcion"},
 }
 
 

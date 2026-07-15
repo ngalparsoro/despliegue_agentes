@@ -50,12 +50,8 @@ def evento_existe(id_evento) -> bool:
 
 
 def _mapear_evento_actual(fila_evento: dict) -> dict:
-    """eventos + estados.descripcion -> bloque `evento` de Operis."""
-    estado_texto = ""
-    if fila_evento.get("id_estado"):
-        fila_estado = obtener_por_id("estados", fila_evento["id_estado"])
-        if fila_estado:
-            estado_texto = fila_estado.get("descripcion", "")
+    """eventos -> bloque `evento` de Operis; el estado vive en eventos.estado."""
+    estado_texto = str(fila_evento.get("estado") or "").strip()
 
     return {
         "nombre_evento": fila_evento.get("nombre_evento", "") or "",
