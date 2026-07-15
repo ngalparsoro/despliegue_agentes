@@ -22,6 +22,12 @@ tests, docs ni salidas de demo. La documentación completa vive en el repo
    ./comprobar_salud.sh            # smoke test
    ```
 
+## Estados de evento
+
+La base de datos actual no tiene tabla `estados` ni `eventos.id_estado`. El estado operativo vive directamente en `eventos.estado` como texto. Catalogo vigente: `Planificado`, `Reservado`, `Confirmado`, `Finalizado`, `Cancelado`.
+
+`EVENT_ACTIVE_STATES` solo controla que estados considera Hermes como eventos activos para un ponente; por defecto: `Planificado,Reservado,Confirmado`.
+
 ## Mapa
 
 | Puerto | Servicio |
