@@ -1,0 +1,12 @@
+{
+  "tipo_objetivo": "cliente",
+  "campos_objetivo": [
+    "cliente",
+    "empresa",
+    "email",
+    "telefono",
+    "sector",
+    "ciudad"
+  ],
+  "texto": "Cliente: TechCorp SL. Empresa: TechCorp. Contacto: Laura Martinez. Email: laura@techcorp.es. Telefono: +34 600 123 456. Sector: tecnologia industrial. Ciudad: Bilbao."
+}

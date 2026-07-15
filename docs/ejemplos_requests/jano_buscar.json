@@ -1,0 +1,15 @@
+{
+  "nombre_ponente": "Carlos Barrabes",
+  "email_ponente": "carlos.barrabes@example.com",
+  "nombre_evento": "Tech Summit 2026",
+  "ciudad_evento": "Vitoria-Gasteiz",
+  "fecha_inicio": "2026-09-18",
+  "fecha_fin": "2026-09-18",
+  "ciudad_origen": "Madrid",
+  "personas": 1,
+  "preferencias": "cerca del recinto y horarios comodos",
+  "necesita_hotel": true,
+  "necesita_viaje": true,
+  "necesita_taxi": true,
+  "necesita_coche": false
+}

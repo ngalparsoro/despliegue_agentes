@@ -1,0 +1,13 @@
+{
+  "tipo_objetivo": "evento",
+  "campos_objetivo": [
+    "nombre_evento",
+    "ciudad",
+    "fecha_inicio",
+    "fecha_fin",
+    "numero_personas",
+    "tipo_evento",
+    "nota"
+  ],
+  "texto": "Evento Tech Summit 2026 en Vitoria-Gasteiz el 18/09/2026 para 250 asistentes. Tipo jornada corporativa. Objetivo: presentacion anual, networking y refuerzo de marca."
+}

@@ -71,6 +71,12 @@ https://despliegue-agentes.onrender.com
 
 Contrato detallado para Front/FS: [docs/CONTRATO_FRONT_DS.md](docs/CONTRATO_FRONT_DS.md).
 
+Documentacion operativa:
+
+- [docs/ejemplos_requests/README.md](docs/ejemplos_requests/README.md): ejemplos para Thunder Client.
+- [docs/CHECKLIST_DEMO.md](docs/CHECKLIST_DEMO.md): flujo recomendado para la demo.
+- [docs/LIMITACIONES_CONOCIDAS.md](docs/LIMITACIONES_CONOCIDAS.md): limitaciones y plan de lectura.
+
 ## Estados de evento
 
 La BBDD actual no tiene tabla `estados` ni `eventos.id_estado`. El estado operativo vive directamente en `eventos.estado` como texto.
